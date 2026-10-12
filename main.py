@@ -2158,7 +2158,7 @@ def register_handlers(b: telebot.TeleBot):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @app.route('/')
 def index():
-    return redirect(url_for('dashboard') if session.get('logged_in') else url_for('login'))
+    return render_template('index.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -2174,6 +2174,67 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Public Website — no login required
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+_PUBLIC_RL = {}          # ip -> deque[timestamps]
+_PUBLIC_RL_MAX = 20      # max requests
+_PUBLIC_RL_WINDOW = 60   # per seconds
+
+def _public_rate_ok(ip):
+    now = _time_module.time()
+    dq = _PUBLIC_RL.get(ip)
+    if dq is None:
+        dq = _PUBLIC_RL[ip] = deque()
+    while dq and now - dq[0] > _PUBLIC_RL_WINDOW:
+        dq.popleft()
+    if len(dq) >= _PUBLIC_RL_MAX:
+        return False
+    dq.append(now)
+    # keep memory bounded
+    if len(_PUBLIC_RL) > 5000:
+        _PUBLIC_RL.clear()
+    return True
+
+def _public_ip():
+    fwd = request.headers.get('X-Forwarded-For', '')
+    if fwd:
+        return fwd.split(',')[0].strip()
+    return (request.remote_addr or 'unknown').strip()
+
+@app.route('/api/public/meta')
+def api_public_meta():
+    countries = get_country_details()
+    enabled = CONFIG.get("bot_reply_fields", FIELD_KEYS)
+    fields = [
+        {"key": k, "label": FIELD_LABELS[k], "emoji": FIELD_EMOJI[k]}
+        for k in FIELD_KEYS if k in enabled
+    ]
+    return jsonify(
+        countries={k: {"code": v.get("code", ""), "is_bd": bool(v.get("is_bd", False))}
+                   for k, v in countries.items()},
+        fields=fields,
+    )
+
+@app.route('/api/public/generate', methods=['POST'])
+def api_public_generate():
+    ip = _public_ip()
+    if not _public_rate_ok(ip):
+        return jsonify(success=False,
+                       error='Too many requests — please wait a minute and try again.'), 429
+    data = request.get_json(force=True, silent=True) or {}
+    country = str(data.get('country', 'bangladesh')).lower()
+    profile = generate_profile(country)
+    if not profile:
+        return jsonify(success=False, error='Unknown country'), 400
+    recent_log.append(profile)
+    enabled = CONFIG.get("bot_reply_fields", FIELD_KEYS)
+    out = {"country": profile.get("country", country)}
+    for k in FIELD_KEYS:
+        if k in enabled and k in profile:
+            out[k] = profile[k]
+    return jsonify(success=True, profile=out)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Flask Routes — Dashboard
