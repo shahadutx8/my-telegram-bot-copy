@@ -1,0 +1,2387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Bot Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+      font-family: 'Segoe UI', sans-serif;
+      color: #fff;
+    }
+    nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 28px;
+      background: rgba(255,255,255,0.05);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      position: sticky; top: 0; z-index: 10;
+      backdrop-filter: blur(10px);
+    }
+    nav .brand { font-size: 19px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+    .tab-bar { display: flex; gap: 4px; }
+    .tab-btn {
+      padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      border: none; cursor: pointer; background: transparent; color: #aaa; transition: all 0.2s;
+    }
+    .tab-btn.active { background: rgba(124,99,245,0.25); color: #c4b5fd; }
+    .tab-btn:hover:not(.active) { background: rgba(255,255,255,0.07); color: #fff; }
+    nav .logout-btn {
+      padding: 8px 16px; border-radius: 8px; text-decoration: none;
+      font-size: 13px; font-weight: 600;
+      background: rgba(255,80,80,0.18); color: #ff7070;
+      border: 1px solid rgba(255,80,80,0.3);
+    }
+    nav .logout-btn:hover { background: rgba(255,80,80,0.3); }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 28px 20px; }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* ── Stat cards ── */
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin-bottom: 28px; }
+    .stat-card {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px; padding: 20px 22px; text-align: center;
+    }
+    .stat-card .icon { font-size: 28px; margin-bottom: 8px; }
+    .stat-card .num { font-size: 26px; font-weight: 700; color: #a78bfa; }
+    .stat-card .label { font-size: 12px; color: #aaa; margin-top: 4px; }
+
+    /* ── Section ── */
+    .section {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 18px; padding: 26px; margin-bottom: 22px;
+    }
+    .section h2 { font-size: 16px; font-weight: 700; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+
+    /* ── Generate form ── */
+    .gen-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    select {
+      padding: 11px 16px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      background: rgba(255,255,255,0.1); color: #fff;
+      border: 1px solid rgba(255,255,255,0.2); flex: 1; min-width: 160px;
+    }
+    select option { background: #302b63; }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 11px 22px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      border: none; cursor: pointer; transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.82; }
+    .btn-purple { background: linear-gradient(90deg, #7c63f5, #5b8dee); color: #fff; }
+    .btn-red    { background: rgba(255,80,80,0.2); color: #ff7070; border: 1px solid rgba(255,80,80,0.3); }
+    .btn-blue   { background: rgba(90,180,255,0.15); color: #7bcfff; border: 1px solid rgba(90,180,255,0.3); }
+    .btn-green  { background: rgba(0,200,100,0.18); color: #4ade80; border: 1px solid rgba(0,200,100,0.3); }
+    .btn-orange { background: rgba(255,160,50,0.18); color: #fbbf24; border: 1px solid rgba(255,160,50,0.3); }
+    .btn-sm { padding: 8px 16px; font-size: 13px; }
+
+    /* ── Profile grid ── */
+    #profile-result { margin-top: 20px; display: none; }
+    .profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+    .profile-field {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px; padding: 14px 16px;
+    }
+    .profile-field .f-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+    .profile-field .f-value {
+      font-size: 14px; font-weight: 600; color: #e0d7ff;
+      word-break: break-all; cursor: pointer; user-select: all;
+    }
+    .profile-field .f-value:hover { color: #a78bfa; }
+    .f-hint { font-size: 11px; color: #555; margin-top: 3px; }
+
+    /* ── Log table ── */
+    .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .log-table th { text-align: left; padding: 8px 12px; color: #888; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .log-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.05); color: #ddd; }
+    .log-table tr:last-child td { border-bottom: none; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+    .badge-bd  { background: rgba(0,200,100,0.15); color: #4ade80; border: 1px solid rgba(0,200,100,0.3); }
+    .badge-int { background: rgba(90,140,255,0.15); color: #93c5fd; border: 1px solid rgba(90,140,255,0.3); }
+
+    /* ── Settings ── */
+    .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+    .settings-card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px; padding: 24px;
+    }
+    .settings-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 12px; color: #aaa; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+    .form-group input {
+      width: 100%; padding: 11px 14px;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 10px; background: rgba(255,255,255,0.07);
+      color: #fff; font-size: 14px; outline: none; transition: border 0.2s;
+    }
+    .form-group input:focus { border-color: #7c63f5; }
+    .form-group input::placeholder { color: #555; }
+    .form-msg { font-size: 13px; margin-top: 10px; padding: 9px 14px; border-radius: 8px; display: none; }
+    .form-msg.success { background: rgba(0,200,100,0.12); color: #4ade80; border: 1px solid rgba(0,200,100,0.25); }
+    .form-msg.error   { background: rgba(255,80,80,0.12);  color: #ff7070; border: 1px solid rgba(255,80,80,0.25); }
+
+    /* ── Bot status badge ── */
+    .bot-status-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 14px; border-radius: 20px; font-size: 13px; font-weight: 700;
+    }
+    .status-pill.online  { background: rgba(0,200,100,0.15); color: #4ade80; border: 1px solid rgba(0,200,100,0.3); }
+    .status-pill.offline { background: rgba(255,80,80,0.15);  color: #ff7070; border: 1px solid rgba(255,80,80,0.3); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .dot.green { background: #4ade80; animation: pulse 1.5s infinite; }
+    .dot.red   { background: #ff7070; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+    /* ── Ban badge / button ── */
+    .ban-btn {
+      background: rgba(239,68,68,0.12); color: #f87171;
+      border: 1px solid rgba(239,68,68,0.3); border-radius: 6px;
+      font-size: 11px; font-weight: 700; padding: 3px 9px;
+      cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .ban-btn:hover { background: rgba(239,68,68,0.28); }
+    .unban-btn {
+      background: rgba(34,197,94,0.12); color: #4ade80;
+      border: 1px solid rgba(34,197,94,0.3); border-radius: 6px;
+      font-size: 11px; font-weight: 700; padding: 3px 9px;
+      cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .unban-btn:hover { background: rgba(34,197,94,0.28); }
+    .banned-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(239,68,68,0.12); color: #f87171;
+      border: 1px solid rgba(239,68,68,0.25); border-radius: 6px;
+      font-size: 10px; font-weight: 700; padding: 2px 7px;
+    }
+    .reason-cell { font-size: 12px; color: #aaa; max-width: 200px; word-break: break-word; }
+
+    /* ── Usage table ── */
+    .usage-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .usage-table thead tr { background:rgba(255,255,255,0.06); }
+    .usage-table th {
+      padding:12px 16px; text-align:left; font-weight:700;
+      color:#a0a0b0; border-bottom:1px solid rgba(255,255,255,0.08);
+      white-space:nowrap;
+    }
+    .usage-table tbody tr { border-bottom:1px solid rgba(255,255,255,0.05); transition:background .15s; }
+    .usage-table tbody tr:hover { background:rgba(255,255,255,0.04); }
+    .usage-table td { padding:11px 16px; vertical-align:middle; }
+    .usage-table td:first-child { color:#555; font-size:11px; }
+    .usage-name { font-weight:700; color:#c4b5fd; }
+    .usage-user { display:flex; flex-direction:column; gap:2px; }
+    .usage-user .uname { font-weight:600; color:#60a5fa; }
+    .usage-user .ufirst { font-size:11px; color:#666; }
+    .usage-uid { font-family:monospace; font-size:11px; color:#888; }
+    .usage-time { font-size:11px; color:#666; white-space:nowrap; }
+    .usage-del { background:none; border:none; cursor:pointer; font-size:16px; opacity:.4; transition:opacity .15s; padding:4px 8px; border-radius:6px; }
+    .usage-del:hover { opacity:1; background:rgba(239,68,68,.15); color:#f87171; }
+    .usage-user-reset { background:none; border:none; cursor:pointer; font-size:11px; color:#60a5fa; opacity:.55; padding:2px 6px; border-radius:4px; transition:opacity .15s; }
+    .usage-user-reset:hover { opacity:1; text-decoration:underline; }
+
+    /* ── Names tab ── */
+    .names-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 20px; font-size: 13px;
+      background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+    }
+    .names-pill.combo { background: rgba(124,99,245,0.18); border-color: rgba(124,99,245,0.35); color: #c4b5fd; }
+    .names-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media(max-width:700px){ .names-grid { grid-template-columns: 1fr; } }
+    .names-card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 18px; padding: 22px;
+    }
+    .names-card-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+    .names-card-head h3 { font-size:15px; font-weight:700; }
+    .names-add-row { display:flex; gap:8px; margin-bottom:14px; }
+    .names-input {
+      flex:1; padding:9px 13px; border-radius:9px; font-size:13px;
+      background: rgba(255,255,255,0.08); color:#fff;
+      border: 1px solid rgba(255,255,255,0.18); outline:none;
+    }
+    .names-input:focus { border-color:#7c63f5; }
+    .names-input::placeholder { color:#555; }
+    .names-list {
+      display:flex; flex-wrap:wrap; gap:7px;
+      max-height:320px; overflow-y:auto; padding-right:4px;
+    }
+    .names-list::-webkit-scrollbar { width:4px; }
+    .names-list::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); border-radius:4px; }
+    .name-tag {
+      display:inline-flex; align-items:center; gap:5px;
+      padding:5px 10px; border-radius:8px; font-size:12px; font-weight:600;
+      background: rgba(124,99,245,0.15); border:1px solid rgba(124,99,245,0.25);
+      color:#c4b5fd; user-select:none;
+    }
+    .prefix-tag { background:rgba(251,191,36,0.1); border-color:rgba(251,191,36,0.25); color:#fcd34d; }
+    .name-tag button {
+      background:none; border:none; color:inherit; cursor:pointer;
+      font-size:14px; line-height:1; padding:0 2px; opacity:0.5;
+    }
+    .name-tag button:hover { opacity:1; color:#ff7070; }
+
+    /* ── Schedule cards ── */
+    .sch-card {
+      display:flex;flex-wrap:wrap;align-items:center;gap:12px;
+      background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+      border-radius:14px;padding:16px 20px;margin-bottom:12px;
+    }
+    .sch-card.inactive { opacity:0.5; }
+    .sch-info { flex:1;min-width:180px; }
+    .sch-text { font-size:14px;font-weight:600;color:#e0d7ff;margin-bottom:6px;word-break:break-word; }
+    .sch-meta { font-size:12px;color:#888;display:flex;gap:12px;flex-wrap:wrap; }
+    .sch-badge {
+      display:inline-block;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700;
+      background:rgba(124,99,245,0.2);color:#c4b5fd;border:1px solid rgba(124,99,245,0.35);
+    }
+    .sch-badge.daily  { background:rgba(0,200,100,0.12);color:#4ade80;border-color:rgba(0,200,100,0.3); }
+    .sch-badge.weekly { background:rgba(251,191,36,0.12);color:#fcd34d;border-color:rgba(251,191,36,0.3); }
+    .sch-badge.once   { background:rgba(90,140,255,0.12);color:#93c5fd;border-color:rgba(90,140,255,0.3); }
+    .sch-actions { display:flex;gap:8px;align-items:center;flex-shrink:0; }
+
+    /* ── Media type buttons ── */
+    .sm-type-btn { background:rgba(255,255,255,0.07);color:#aaa;border:1px solid rgba(255,255,255,0.15); }
+    .sm-type-btn.active-type { background:rgba(124,99,245,0.25);color:#c4b5fd;border-color:rgba(124,99,245,0.5); }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      padding: 11px 20px; border-radius: 10px;
+      font-weight: 700; font-size: 14px;
+      opacity: 0; pointer-events: none; transition: opacity 0.3s;
+      background: #4ade80; color: #000;
+    }
+    #toast.show { opacity: 1; }
+    #toast.err  { background: #ff7070; color: #fff; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="brand">🤖 Bot Dashboard</div>
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('home',this)">🏠 Home</button>
+    <button class="tab-btn" onclick="switchTab('generate',this)">⚡ Generate</button>
+    <button class="tab-btn" onclick="switchTab('names',this)">📝 Names</button>
+    <button class="tab-btn" onclick="switchTab('countries',this)">🌍 Countries</button>
+    <button class="tab-btn" onclick="switchTab('usage',this)" id="btn-usage">👁️ Usage</button>
+    <button class="tab-btn" onclick="switchTab('banned',this)" id="btn-banned">🚫 Banned</button>
+    <button class="tab-btn" onclick="switchTab('users',this)">📊 Users</button>
+    <button class="tab-btn" onclick="switchTab('broadcast',this)">📢 Broadcast</button>
+    <button class="tab-btn" onclick="switchTab('schedule',this)">📅 Schedule</button>
+    <button class="tab-btn" onclick="switchTab('sendmedia',this)">📨 Send</button>
+    <button class="tab-btn" onclick="switchTab('files',this)">📂 Files</button>
+    <button class="tab-btn" onclick="switchTab('log',this)">📜 Log</button>
+    <button class="tab-btn" onclick="switchTab('texts',this)">✏️ Texts</button>
+    <button class="tab-btn" onclick="switchTab('settings',this)">⚙️ Settings</button>
+  </div>
+  <a href="/logout" class="logout-btn">Logout</a>
+</nav>
+
+<div class="container">
+
+  <!-- ══ HOME TAB ══ -->
+  <div id="tab-home" class="page active">
+    <div class="stats">
+      <div class="stat-card">
+        <div class="icon">🇧🇩</div>
+        <div class="num" id="stat-total">{{ total_combinations | int | format_num }}</div>
+        <div class="label">Total BD Combinations</div>
+      </div>
+      <div class="stat-card">
+        <div class="icon">✅</div>
+        <div class="num" id="stat-used">{{ used_count | format_num }}</div>
+        <div class="label">Names Used</div>
+      </div>
+      <div class="stat-card">
+        <div class="icon">⏳</div>
+        <div class="num" id="stat-remaining">{{ remaining | format_num }}</div>
+        <div class="label">Names Remaining</div>
+      </div>
+      <div class="stat-card">
+        <div class="icon">📋</div>
+        <div class="num" id="stat-log">{{ log_count }}</div>
+        <div class="label">Profiles Generated</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>🤖 Bot Status</h2>
+      <div class="bot-status-row">
+        {% if bot_status.running %}
+        <span class="status-pill online"><span class="dot green"></span>Online</span>
+        <span style="font-size:13px;color:#888">Token: {{ bot_status.token_preview }}</span>
+        {% else %}
+        <span class="status-pill offline"><span class="dot red"></span>Offline</span>
+        <span style="font-size:13px;color:#ff7070">{{ bot_status.error or 'No token set' }}</span>
+        {% endif %}
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-blue btn-sm" onclick="refreshStats()">🔄 Refresh Stats</button>
+        <button class="btn btn-red btn-sm" onclick="resetNames()">🗑️ Reset BD Names</button>
+        {% if bot_status.running %}
+        <button class="btn btn-orange btn-sm" onclick="stopBot()">🛑 Stop Bot</button>
+        {% endif %}
+      </div>
+      <p id="home-msg" style="margin-top:12px;font-size:13px;color:#aaa;"></p>
+    </div>
+  </div>
+
+  <!-- ══ GENERATE TAB ══ -->
+  <div id="tab-generate" class="page">
+    <div class="section">
+      <h2>⚡ Generate Profile</h2>
+      <div class="gen-row">
+        <select id="country-select">
+          <option value="">Loading countries…</option>
+        </select>
+        <button class="btn btn-purple" onclick="generateProfile()">Generate</button>
+      </div>
+      <div id="profile-result">
+        <div class="profile-grid" id="profile-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ USAGE TAB ══ -->
+  <div id="tab-usage" class="page">
+
+    <!-- Top bar -->
+    <div class="section" style="padding:16px 22px;margin-bottom:16px;">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;">
+        <div style="flex:1;min-width:200px;position:relative;">
+          <input type="text" id="usage-search" placeholder="🔍 নাম / ইউজার / ID দিয়ে খুঁজুন…"
+            oninput="usageSearch()" class="names-input" style="width:100%;padding-left:14px;"/>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span id="usage-count" style="font-size:13px;color:#aaa;white-space:nowrap;"></span>
+          <button class="btn btn-sm" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);"
+            onclick="resetAllUsage()">🗑️ সব রিসেট</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="section" style="padding:0;overflow:hidden;">
+      <div style="overflow-x:auto;">
+        <table class="usage-table" id="usage-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>BD নাম</th>
+              <th>Telegram ইউজার</th>
+              <th>User ID</th>
+              <th>সময়</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="usage-tbody">
+            <tr><td colspan="6" style="text-align:center;padding:40px;color:#666;">লোড হচ্ছে…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ BANNED TAB ══ -->
+  <div id="tab-banned" class="page">
+
+    <!-- Top bar -->
+    <div class="section" style="padding:16px 22px;margin-bottom:16px;">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;">
+        <div style="flex:1;min-width:200px;">
+          <input type="text" id="banned-search" placeholder="🔍 User ID / @username দিয়ে খুঁজুন…"
+            oninput="bannedSearch()" class="names-input" style="width:100%;padding-left:14px;"/>
+        </div>
+        <span id="banned-count" style="font-size:13px;color:#aaa;white-space:nowrap;"></span>
+      </div>
+    </div>
+
+    <!-- Manual ban form -->
+    <div class="section" style="padding:18px 22px;margin-bottom:16px;">
+      <h3 style="font-size:14px;font-weight:700;margin-bottom:14px;color:#f87171;">🚫 ম্যানুয়ালি ব্যান করুন</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:11px;color:#888;">Telegram User ID *</label>
+          <input type="number" id="ban-uid-input" placeholder="e.g. 123456789" class="names-input" style="width:180px;"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:11px;color:#888;">@Username (optional)</label>
+          <input type="text" id="ban-uname-input" placeholder="@username" class="names-input" style="width:160px;"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px;">
+          <label style="font-size:11px;color:#888;">কারণ (optional)</label>
+          <input type="text" id="ban-reason-input" placeholder="ব্যানের কারণ লিখুন…" class="names-input"/>
+        </div>
+        <button class="btn" style="background:rgba(239,68,68,0.2);color:#f87171;border:1px solid rgba(239,68,68,0.4);padding:9px 20px;"
+          onclick="banManual()">🚫 ব্যান করো</button>
+      </div>
+    </div>
+
+    <!-- Banned list -->
+    <div class="section" style="padding:0;overflow:hidden;">
+      <div style="overflow-x:auto;">
+        <table class="usage-table" id="banned-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Telegram ইউজার</th>
+              <th>User ID</th>
+              <th>কারণ</th>
+              <th>ব্যান হওয়ার সময়</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="banned-tbody">
+            <tr><td colspan="6" style="text-align:center;padding:40px;color:#666;">লোড হচ্ছে…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ NAMES TAB ══ -->
+  <div id="tab-names" class="page">
+
+    <!-- Summary bar -->
+    <div class="section" style="padding:18px 26px;margin-bottom:18px;">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:18px;">
+        <div style="display:flex;gap:14px;flex-wrap:wrap;flex:1;">
+          <span class="names-pill" id="pill-first">🔤 First: <strong id="cnt-first">{{ first_names|length }}</strong></span>
+          <span class="names-pill" id="pill-last">🔤 Last: <strong id="cnt-last">{{ last_names|length }}</strong></span>
+          <span class="names-pill" id="pill-prefix">🏷️ Prefix: <strong id="cnt-prefix">{{ prefixes|length }}</strong></span>
+          <span class="names-pill combo">🔢 Combinations: <strong id="cnt-combo">{{ total_combinations | int | format_num }}</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="names-grid">
+
+      <!-- First Names -->
+      <div class="names-card">
+        <div class="names-card-head">
+          <h3>👤 First Names</h3>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-sm btn-blue" onclick="resetDefaults('bd_first_names')">↺ Default</button>
+          </div>
+        </div>
+        <div class="names-add-row">
+          <input type="text" id="add-first" placeholder="e.g. Rafiq, Salam, Barek" class="names-input"/>
+          <button class="btn btn-purple btn-sm" onclick="addNames('bd_first_names','add-first')">+ Add</button>
+        </div>
+        <div class="names-list" id="list-first">
+          {% for name in first_names %}
+          <span class="name-tag" data-kind="bd_first_names" data-name="{{ name }}">
+            {{ name }} <button onclick="deleteName('bd_first_names','{{ name }}',this.parentElement)">×</button>
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Last Names -->
+      <div class="names-card">
+        <div class="names-card-head">
+          <h3>👥 Last Names</h3>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-sm btn-blue" onclick="resetDefaults('bd_last_names')">↺ Default</button>
+          </div>
+        </div>
+        <div class="names-add-row">
+          <input type="text" id="add-last" placeholder="e.g. Mia, Gazi, Talukder" class="names-input"/>
+          <button class="btn btn-purple btn-sm" onclick="addNames('bd_last_names','add-last')">+ Add</button>
+        </div>
+        <div class="names-list" id="list-last">
+          {% for name in last_names %}
+          <span class="name-tag" data-kind="bd_last_names" data-name="{{ name }}">
+            {{ name }} <button onclick="deleteName('bd_last_names','{{ name }}',this.parentElement)">×</button>
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Prefixes -->
+      <div class="names-card" style="max-width:360px;">
+        <div class="names-card-head">
+          <h3>🏷️ Prefixes</h3>
+          <button class="btn btn-sm btn-blue" onclick="resetDefaults('bd_prefixes')">↺ Default</button>
+        </div>
+        <div class="names-add-row">
+          <input type="text" id="add-prefix" placeholder="e.g. Md., Al" class="names-input"/>
+          <button class="btn btn-purple btn-sm" onclick="addNames('bd_prefixes','add-prefix')">+ Add</button>
+        </div>
+        <div class="names-list" id="list-prefix">
+          {% for p in prefixes %}
+          <span class="name-tag prefix-tag" data-kind="bd_prefixes" data-name="{{ p }}">
+            {{ p }} <button onclick="deleteName('bd_prefixes','{{ p }}',this.parentElement)">×</button>
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+
+    </div><!-- /names-grid -->
+  </div>
+
+  <!-- ══ COUNTRIES TAB ══ -->
+  <div id="tab-countries" class="page">
+
+    <!-- Add Country Form -->
+    <div class="section" style="padding:22px 26px;margin-bottom:18px;">
+      <h2>🌍 Add / Update Country</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px;">
+        <div class="form-group" style="margin:0;">
+          <label>Key (bot command) *</label>
+          <input type="text" id="c-key" placeholder="e.g. usa" class="names-input"/>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Faker Locale *</label>
+          <input type="text" id="c-locale" placeholder="e.g. en_US" class="names-input"/>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Phone Code *</label>
+          <input type="text" id="c-code" placeholder="e.g. +1" class="names-input"/>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>BD Name Pool?</label>
+          <select id="c-isbd" class="names-input" style="padding:9px 13px;">
+            <option value="false">No (Faker)</option>
+            <option value="true">Yes (BD names)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Multi-pattern section -->
+      <div class="form-group" style="margin-bottom:10px;">
+        <label style="display:flex;align-items:center;justify-content:space-between;">
+          <span>📱 Digit Patterns (১–১০টি, বট randomly বেছে নেবে) *</span>
+          <button type="button" class="btn btn-sm btn-purple" onclick="addPatternRow()" style="padding:4px 12px;font-size:12px;">+ যোগ করুন</button>
+        </label>
+        <div id="patterns-container" style="display:flex;flex-direction:column;gap:7px;margin-top:8px;">
+          <div class="pattern-row" style="display:flex;gap:8px;align-items:center;">
+            <input type="text" class="names-input pattern-input" placeholder="e.g. 13XXXXXXXX" style="flex:1;margin:0;"/>
+            <button type="button" class="btn btn-sm btn-red" onclick="removePatternRow(this)" style="padding:4px 10px;" title="সরান">✕</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button class="btn btn-purple" onclick="addCountry()" style="height:40px;flex:1;">✅ Save</button>
+        <button class="btn btn-sm" onclick="clearCountryForm()" style="height:40px;padding:0 18px;background:#374151;color:#ccc;">🔄 Clear</button>
+      </div>
+      <div id="country-msg" class="form-msg"></div>
+    </div>
+
+    <!-- Country List -->
+    <div class="section" style="padding:0;overflow:hidden;">
+      <div style="overflow-x:auto;">
+        <table class="usage-table" id="country-table">
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>Locale</th>
+              <th>Phone Code</th>
+              <th>Digit Pattern</th>
+              <th>BD Names?</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="country-tbody">
+            <tr><td colspan="6" style="text-align:center;padding:40px;color:#666;">লোড হচ্ছে…</td></tr>
+          </tbody>
+
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ USERS TAB ══ -->
+  <div id="tab-users" class="page">
+    <div class="section" style="padding:16px 22px;margin-bottom:16px;">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;">
+        <div style="flex:1;min-width:200px;">
+          <input type="text" id="users-search" placeholder="🔍 User ID / @username / নাম দিয়ে খুঁজুন…"
+            oninput="usersSearch()" class="names-input" style="width:100%;"/>
+        </div>
+        <span id="users-count" style="font-size:13px;color:#aaa;white-space:nowrap;"></span>
+      </div>
+    </div>
+    <div class="section" style="padding:0;overflow:hidden;">
+      <div style="overflow-x:auto;">
+        <table class="usage-table" id="users-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Telegram ইউজার</th>
+              <th>User ID</th>
+              <th style="text-align:center;">প্রোফাইল নিয়েছে</th>
+              <th>শেষ দেখা</th>
+            </tr>
+          </thead>
+          <tbody id="users-tbody">
+            <tr><td colspan="5" style="text-align:center;padding:40px;color:#666;">লোড হচ্ছে…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ BROADCAST TAB ══ -->
+  <div id="tab-broadcast" class="page">
+    <div class="section" style="margin-bottom:18px;">
+      <h2>📢 Broadcast Message</h2>
+      <p style="font-size:13px;color:#aaa;margin-bottom:16px;">বটে এখন পর্যন্ত যোগাযোগ করেছে এমন সব ইউজারকে একটি মেসেজ পাঠান।</p>
+      <div class="form-group">
+        <label>মেসেজ লিখুন</label>
+        <textarea id="broadcast-text"
+          style="width:100%;min-height:120px;padding:11px 14px;border:1px solid rgba(255,255,255,0.15);
+                 border-radius:10px;background:rgba(255,255,255,0.07);color:#fff;font-size:14px;
+                 outline:none;resize:vertical;font-family:inherit;"
+          placeholder="সবাইকে যে মেসেজটি পাঠাতে চান…"></textarea>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+        <button class="btn btn-purple" onclick="startBroadcast()" id="broadcast-btn">📢 Send to All</button>
+        <span id="broadcast-user-count" style="font-size:13px;color:#aaa;"></span>
+      </div>
+      <div class="form-msg" id="broadcast-msg"></div>
+    </div>
+
+    <!-- Progress -->
+    <div class="section" id="broadcast-progress-card" style="display:none;">
+      <h2>📡 Broadcast Progress</h2>
+      <div style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px;">
+          <span>পাঠানো হচ্ছে…</span>
+          <span id="bc-fraction" style="color:#a78bfa;">0 / 0</span>
+        </div>
+        <div style="background:rgba(255,255,255,0.08);border-radius:8px;height:10px;overflow:hidden;">
+          <div id="bc-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#7c63f5,#5b8dee);transition:width 0.4s;border-radius:8px;"></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px;">
+        <span>✅ সফল: <strong id="bc-sent" style="color:#4ade80;">0</strong></span>
+        <span>❌ ব্যর্থ: <strong id="bc-failed" style="color:#f87171;">0</strong></span>
+        <span>মোট: <strong id="bc-total" style="color:#a78bfa;">0</strong></span>
+      </div>
+      <p id="bc-done-msg" style="margin-top:12px;font-size:13px;color:#4ade80;display:none;">✅ Broadcast সম্পন্ন হয়েছে!</p>
+    </div>
+  </div>
+
+  <!-- ══ SCHEDULE TAB ══ -->
+  <div id="tab-schedule" class="page">
+
+    <!-- Add Schedule Form -->
+    <div class="section" style="margin-bottom:18px;">
+      <h2>📅 নতুন Schedule যোগ করুন</h2>
+      <p style="font-size:13px;color:#aaa;margin-bottom:18px;">নির্দিষ্ট সময়ে বটের মাধ্যমে সব ইউজারকে অটো মেসেজ পাঠান।</p>
+
+      <div class="form-group">
+        <label>মেসেজ লিখুন *</label>
+        <textarea id="sch-text"
+          style="width:100%;min-height:100px;padding:11px 14px;border:1px solid rgba(255,255,255,0.15);
+                 border-radius:10px;background:rgba(255,255,255,0.07);color:#fff;font-size:14px;
+                 outline:none;resize:vertical;font-family:inherit;"
+          placeholder="সব ইউজারকে যে মেসেজটি পাঠাতে চান…"></textarea>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px;">
+        <div class="form-group" style="margin:0;">
+          <label>সময় (HH:MM) *</label>
+          <input type="time" id="sch-time" class="names-input" style="width:100%;padding:9px 13px;color:#fff;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.18);border-radius:9px;outline:none;font-size:14px;"/>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>পুনরাবৃত্তি *</label>
+          <select id="sch-repeat" class="names-input" style="padding:9px 13px;" onchange="toggleWeekday()">
+            <option value="daily">প্রতিদিন</option>
+            <option value="weekly">সাপ্তাহিক</option>
+            <option value="once">একবার</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;" id="sch-weekday-wrap" style="display:none;">
+          <label>বার</label>
+          <select id="sch-weekday" class="names-input" style="padding:9px 13px;">
+            <option value="0">সোমবার</option>
+            <option value="1">মঙ্গলবার</option>
+            <option value="2">বুধবার</option>
+            <option value="3">বৃহস্পতিবার</option>
+            <option value="4">শুক্রবার</option>
+            <option value="5">শনিবার</option>
+            <option value="6">রবিবার</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="btn btn-purple" onclick="addSchedule()">✅ Schedule যোগ করুন</button>
+      <div class="form-msg" id="sch-msg"></div>
+    </div>
+
+    <!-- Schedule List -->
+    <div class="section" style="padding:0;overflow:hidden;">
+      <div style="padding:16px 22px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between;">
+        <h2 style="margin:0;font-size:16px;">📋 সক্রিয় Schedules</h2>
+        <button class="btn btn-sm btn-blue" onclick="loadSchedules()">🔄 Refresh</button>
+      </div>
+      <div id="sch-list" style="padding:16px 22px;">
+        <p style="color:#666;font-size:14px;text-align:center;padding:30px;">লোড হচ্ছে…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ SEND MEDIA TAB ══ -->
+  <div id="tab-sendmedia" class="page">
+    <div class="section" style="margin-bottom:18px;">
+      <h2>📨 নির্দিষ্ট ইউজারকে মেসেজ / মিডিয়া পাঠান</h2>
+      <p style="font-size:13px;color:#aaa;margin-bottom:18px;">টেক্সট, ছবি, ভিডিও, অডিও বা যেকোনো ফাইল পাঠান — একজনকে বা সবাইকে।</p>
+
+      <!-- Target -->
+      <div class="form-group">
+        <label>কাকে পাঠাবেন?</label>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;padding:10px 18px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);">
+            <input type="radio" name="sm-target" value="user" checked onchange="toggleTarget()" style="accent-color:#7c63f5;width:16px;height:16px;"> নির্দিষ্ট ইউজার
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;padding:10px 18px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);">
+            <input type="radio" name="sm-target" value="all" onchange="toggleTarget()" style="accent-color:#7c63f5;width:16px;height:16px;"> সব ইউজার
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group" id="sm-uid-wrap">
+        <label>Telegram User ID *</label>
+        <input type="number" id="sm-userid" placeholder="e.g. 123456789" class="names-input" style="max-width:260px;"/>
+        <div style="margin-top:6px;font-size:12px;color:#666;">Users ট্যাব থেকে User ID কপি করুন।</div>
+      </div>
+
+      <!-- Media Type -->
+      <div class="form-group">
+        <label>মিডিয়া টাইপ</label>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-sm sm-type-btn active-type" onclick="setMediaType('text',this)">💬 টেক্সট</button>
+          <button class="btn btn-sm sm-type-btn" onclick="setMediaType('photo',this)">🖼️ ছবি</button>
+          <button class="btn btn-sm sm-type-btn" onclick="setMediaType('video',this)">🎬 ভিডিও</button>
+          <button class="btn btn-sm sm-type-btn" onclick="setMediaType('audio',this)">🎵 অডিও</button>
+          <button class="btn btn-sm sm-type-btn" onclick="setMediaType('document',this)">📄 ফাইল</button>
+        </div>
+      </div>
+
+      <!-- Text message area -->
+      <div class="form-group" id="sm-text-wrap">
+        <label>মেসেজ লিখুন *</label>
+        <textarea id="sm-text"
+          style="width:100%;min-height:100px;padding:11px 14px;border:1px solid rgba(255,255,255,0.15);
+                 border-radius:10px;background:rgba(255,255,255,0.07);color:#fff;font-size:14px;
+                 outline:none;resize:vertical;font-family:inherit;"
+          placeholder="যে মেসেজটি পাঠাতে চান…"></textarea>
+      </div>
+
+      <!-- File upload area -->
+      <div class="form-group" id="sm-file-wrap" style="display:none;">
+        <label>ফাইল সিলেক্ট করুন *</label>
+        <div id="sm-drop-zone" style="border:2px dashed rgba(124,99,245,0.4);border-radius:12px;padding:30px;text-align:center;cursor:pointer;transition:border-color 0.2s;background:rgba(124,99,245,0.05);"
+          onclick="document.getElementById('sm-file').click()"
+          ondragover="event.preventDefault();this.style.borderColor='#7c63f5'"
+          ondragleave="this.style.borderColor='rgba(124,99,245,0.4)'"
+          ondrop="handleFileDrop(event)">
+          <div style="font-size:32px;margin-bottom:8px;" id="sm-drop-icon">📂</div>
+          <div style="color:#aaa;font-size:14px;">ফাইল drag করুন অথবা <span style="color:#a78bfa;font-weight:700;">এখানে ক্লিক করুন</span></div>
+          <div id="sm-file-name" style="margin-top:10px;font-size:13px;color:#4ade80;font-weight:600;"></div>
+        </div>
+        <input type="file" id="sm-file" style="display:none;" onchange="onFileSelected(this)"/>
+      </div>
+
+      <!-- Caption for media -->
+      <div class="form-group" id="sm-caption-wrap" style="display:none;">
+        <label>Caption (optional)</label>
+        <input type="text" id="sm-caption" placeholder="মিডিয়ার সাথে ক্যাপশন লিখুন…" class="names-input"/>
+      </div>
+
+      <button class="btn btn-purple" onclick="sendMedia()" id="sm-send-btn">📨 পাঠান</button>
+      <div class="form-msg" id="sm-msg"></div>
+    </div>
+
+    <!-- Recent sends log -->
+    <div class="section">
+      <h2>📋 পাঠানো ইতিহাস</h2>
+      <div id="sm-history" style="font-size:13px;color:#666;">এই session-এ কিছু পাঠানো হয়নি।</div>
+    </div>
+  </div>
+
+  <!-- ══ FILE LIBRARY TAB ══ -->
+  <div id="tab-files" class="page">
+    <div class="section" style="margin-bottom:18px;">
+      <h2>📂 ইউজারদের জন্য ফাইল সংরক্ষণ</h2>
+      <p style="font-size:13px;color:#aaa;margin-bottom:18px;">
+        এখানে ফাইল আপলোড করলে ইউজার <code style="color:#c4b5fd;">/download কমান্ড</code> দিয়ে সেটি পাবে।
+        অথবা private channel-এর message থেকে সরাসরি পাঠাতে পারবেন।
+      </p>
+      <div class="settings-grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));">
+        <div class="form-group">
+          <label>ফাইলের নাম *</label>
+          <input type="text" id="file-title" placeholder="যেমন: Android App" class="names-input"/>
+        </div>
+        <div class="form-group">
+          <label>ডাউনলোড কমান্ড *</label>
+          <input type="text" id="file-command" placeholder="যেমন: myapp" class="names-input"
+                 pattern="[a-z][a-z0-9_]{1,31}"/>
+          <div style="margin-top:5px;font-size:12px;color:#666;">ইউজার লিখবে: /download myapp</div>
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <input type="text" id="file-category" placeholder="যেমন: Apps, Documents" class="names-input"/>
+        </div>
+        <div class="form-group">
+          <label>Version</label>
+          <input type="text" id="file-version" placeholder="যেমন: 1.0.0" class="names-input"/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Caption (optional)</label>
+        <input type="text" id="file-caption" placeholder="ফাইল পাঠানোর সময় যে লেখা দেখাবে…" class="names-input"/>
+      </div>
+      <div class="settings-grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));">
+        <div class="form-group">
+          <label>Access</label>
+          <select id="file-access" class="names-input" onchange="toggleFileAccess()">
+            <option value="all">সব ইউজার</option>
+            <option value="selected">নির্দিষ্ট User ID</option>
+          </select>
+        </div>
+        <div class="form-group" id="file-allowed-wrap" style="display:none;">
+          <label>Allowed User IDs</label>
+          <input type="text" id="file-allowed" placeholder="123456789, 987654321" class="names-input"/>
+        </div>
+        <div class="form-group">
+          <label>Expiry (optional)</label>
+          <input type="datetime-local" id="file-expiry" class="names-input"/>
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#c4b5fd;margin:4px 0 16px;cursor:pointer;">
+        <input type="checkbox" id="file-replace" style="accent-color:#7c63f5;width:16px;height:16px;"/>
+        একই command থাকলে পুরনো ফাইল replace/update করুন
+      </label>
+      <div class="form-group">
+        <label>Delivery Source *</label>
+        <select id="file-source" class="names-input" onchange="toggleFileSource()">
+          <option value="upload">Dashboard থেকে file upload (সর্বোচ্চ 50 MB)</option>
+          <option value="channel">Private Telegram channel message</option>
+        </select>
+      </div>
+      <div id="channel-source-wrap" style="display:none;padding:13px 15px;margin-bottom:14px;border:1px solid rgba(167,139,250,.3);border-radius:10px;background:rgba(124,99,245,.07);">
+        <div style="font-size:12px;color:#c4b5fd;margin-bottom:10px;">
+          ℹ️ Bot-কে private channel-এ member/admin করুন। Protected channel content copy করা যাবে না।
+        </div>
+        <div class="settings-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
+          <div class="form-group" style="margin:0;">
+            <label>Private Channel ID *</label>
+            <input type="text" id="file-channel-id" placeholder="-1001234567890" class="names-input"/>
+            <div style="margin-top:5px;font-size:11px;color:#777;">সাধারণত -100 দিয়ে শুরু হয়</div>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Message ID *</label>
+            <input type="number" id="file-message-id" placeholder="যেমন: 123" min="1" class="names-input"/>
+            <div style="margin-top:5px;font-size:11px;color:#777;">Channel post-এর message ID</div>
+          </div>
+        </div>
+      </div>
+      <div class="form-group" id="uploaded-file-wrap">
+        <label>ফাইল *</label>
+        <input type="file" id="stored-file" style="width:100%;padding:10px;border-radius:9px;background:rgba(255,255,255,.07);color:#ddd;border:1px solid rgba(255,255,255,.15);"/>
+      </div>
+      <button class="btn btn-purple" onclick="saveStoredFile()" id="file-upload-btn">📤 ফাইল সেভ করুন</button>
+      <div class="form-msg" id="file-msg"></div>
+    </div>
+    <div class="section">
+      <h2>📋 সংরক্ষিত ফাইল</h2>
+      <div id="stored-files-list" style="font-size:13px;color:#666;">লোড হচ্ছে…</div>
+    </div>
+  </div>
+
+  <!-- ══ LOG TAB ══ -->
+  <div id="tab-log" class="page">
+    <div class="section">
+      <h2>📜 Recent Profiles</h2>
+      <div id="log-area">
+        {% if recent_log %}
+        <table class="log-table">
+          <thead><tr><th>#</th><th>Country</th><th>Name</th><th>Username</th><th>Email</th><th>Mobile</th></tr></thead>
+          <tbody>
+            {% for entry in recent_log %}
+            <tr>
+              <td style="color:#666">{{ loop.index }}</td>
+              <td><span class="badge {{ 'badge-bd' if entry.country in ['bangladesh','bd'] else 'badge-int' }}">{{ entry.country|capitalize }}</span></td>
+              <td>{{ entry.full_name }}</td>
+              <td>{{ entry.username }}</td>
+              <td>{{ entry.email }}</td>
+              <td>{{ entry.mobile }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p style="color:#666;font-size:14px;">No profiles generated yet this session.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TEXTS TAB ══ -->
+  <div id="tab-texts" class="page">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h2 style="font-size:16px;font-weight:700;margin:0;">✏️ Bot Message Texts</h2>
+        <p style="font-size:12px;color:#aaa;margin:5px 0 0;">বটের সব টেক্সট এখানে এডিট করুন। Placeholder গুলো <code style="background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:3px;color:#c4b5fd;">{variable}</code> এভাবে লিখুন।</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-purple" onclick="saveAllBotTexts()">💾 Save All</button>
+        <button class="btn" style="background:rgba(255,255,255,0.06);color:#aaa;" onclick="resetAllBotTexts()">↩ Reset All to Default</button>
+      </div>
+    </div>
+    <div class="form-msg" id="texts-global-msg" style="margin-bottom:14px;"></div>
+    <div id="texts-container"><span style="color:#666;font-size:13px;">লোড হচ্ছে…</span></div>
+  </div>
+
+  <!-- ══ SETTINGS TAB ══ -->
+  <div id="tab-settings" class="page">
+    <div class="settings-grid">
+
+      <!-- Bot Token -->
+      <div class="settings-card">
+        <h3>🤖 Telegram Bot Token</h3>
+        <div class="bot-status-row">
+          {% if bot_status.running %}
+          <span class="status-pill online"><span class="dot green"></span>Connected</span>
+          {% else %}
+          <span class="status-pill offline"><span class="dot red"></span>Not Connected</span>
+          {% endif %}
+        </div>
+        <div class="form-group">
+          <label>Bot Token</label>
+          <input type="password" id="bot-token-input" placeholder="1234567890:ABCdef..." autocomplete="off"/>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-purple" onclick="setBotToken()">✅ Connect Bot</button>
+          {% if bot_status.running %}
+          <button class="btn btn-red" onclick="stopBot()">🛑 Stop Bot</button>
+          {% endif %}
+        </div>
+        <div class="form-msg" id="bot-msg"></div>
+        <p style="font-size:12px;color:#666;margin-top:12px;">Get token from <a href="https://t.me/BotFather" style="color:#7c63f5;" target="_blank">@BotFather</a></p>
+      </div>
+
+      <!-- Change Password -->
+      <div class="settings-card">
+        <h3>🔑 Change Dashboard Password</h3>
+        <div class="form-group">
+          <label>Current Password</label>
+          <input type="password" id="cur-pass" placeholder="Current password" autocomplete="off"/>
+        </div>
+        <div class="form-group">
+          <label>New Password</label>
+          <input type="password" id="new-pass" placeholder="New password (min 6 chars)" autocomplete="new-password"/>
+        </div>
+        <div class="form-group">
+          <label>Confirm New Password</label>
+          <input type="password" id="confirm-pass" placeholder="Repeat new password" autocomplete="new-password"/>
+        </div>
+        <button class="btn btn-green" onclick="changePassword()">🔒 Update Password</button>
+        <div class="form-msg" id="pass-msg"></div>
+      </div>
+
+      <!-- Bot Identity Config -->
+      <div class="settings-card">
+        <h3>🛠️ Bot Identity</h3>
+        <div class="form-group">
+          <label>Admin Telegram ID</label>
+          <input type="number" id="cfg-admin-id" placeholder="e.g. 123456789" autocomplete="off"/>
+        </div>
+        <div class="form-group">
+          <label>Developer Name</label>
+          <input type="text" id="cfg-dev-name" placeholder="Shown in profile replies" autocomplete="off"/>
+        </div>
+        <div class="form-group">
+          <label>Nickname Suffixes (comma separated)</label>
+          <input type="text" id="cfg-nick-sfx" placeholder="07, Pro, Official, King, (leave empty for none)" autocomplete="off"/>
+        </div>
+        <button class="btn btn-green" onclick="saveBotConfig()">💾 Save Config</button>
+        <div class="form-msg" id="cfg-msg"></div>
+      </div>
+
+      <!-- Custom Fields -->
+      <div class="settings-card">
+        <h3>🎛️ Bot Reply Fields</h3>
+        <p style="font-size:12px;color:#aaa;margin-bottom:14px;">বটের রিপ্লাইতে কোন কোন তথ্য দেখাবে তা বেছে নিন।</p>
+        <div id="fields-checkboxes" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+          <span style="font-size:12px;color:#666;">লোড হচ্ছে…</span>
+        </div>
+        <button class="btn btn-green" onclick="saveFieldsConfig()">💾 Save Fields</button>
+        <div class="form-msg" id="fields-msg"></div>
+      </div>
+
+      <!-- AI Prompt Customizer -->
+      <div class="settings-card" style="grid-column:1/-1;">
+        <h3>🤖 AI Prompt Customizer</h3>
+        <p style="font-size:12px;color:#aaa;margin-bottom:6px;">
+          <code style="background:rgba(255,255,255,0.07);padding:2px 6px;border-radius:4px;color:#c4b5fd;">/ainame</code> কমান্ডে Gemini-কে কী ধরনের নাম বানাতে বলবে সেটা এখানে কাস্টমাইজ করুন।
+        </p>
+        <div style="background:rgba(124,99,245,0.08);border:1px solid rgba(124,99,245,0.2);border-radius:8px;padding:12px 14px;margin-bottom:18px;font-size:12px;color:#a78bfa;line-height:1.8;">
+          <strong>Available placeholders:</strong><br>
+          🇧🇩 BD Prompt — <code style="background:rgba(0,0,0,0.3);padding:1px 5px;border-radius:3px;">{prefixes}</code> &nbsp; <code style="background:rgba(0,0,0,0.3);padding:1px 5px;border-radius:3px;">{first_names}</code> &nbsp; <code style="background:rgba(0,0,0,0.3);padding:1px 5px;border-radius:3px;">{last_names}</code> &nbsp; <code style="background:rgba(0,0,0,0.3);padding:1px 5px;border-radius:3px;">{country}</code><br>
+          🌍 Intl Prompt — <code style="background:rgba(0,0,0,0.3);padding:1px 5px;border-radius:3px;">{country}</code>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+          <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <label style="font-size:13px;font-weight:600;color:#e0d7ff;">🇧🇩 Bangladesh Prompt</label>
+              <button class="btn" style="font-size:11px;padding:3px 10px;background:rgba(255,255,255,0.06);color:#aaa;" onclick="resetAiPrompt('bd')">↩ Default</button>
+            </div>
+            <textarea id="ai-prompt-bd" rows="10"
+              style="width:100%;background:#0f0f18;border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e0d7ff;font-size:12px;padding:10px 12px;resize:vertical;font-family:monospace;line-height:1.6;"
+              placeholder="BD prompt লিখুন…"></textarea>
+          </div>
+          <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <label style="font-size:13px;font-weight:600;color:#e0d7ff;">🌍 International Prompt</label>
+              <button class="btn" style="font-size:11px;padding:3px 10px;background:rgba(255,255,255,0.06);color:#aaa;" onclick="resetAiPrompt('intl')">↩ Default</button>
+            </div>
+            <textarea id="ai-prompt-intl" rows="10"
+              style="width:100%;background:#0f0f18;border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e0d7ff;font-size:12px;padding:10px 12px;resize:vertical;font-family:monospace;line-height:1.6;"
+              placeholder="International prompt লিখুন…"></textarea>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center;">
+          <button class="btn btn-purple" onclick="saveAiPrompts()">💾 Save Prompts</button>
+          <button class="btn" style="background:rgba(255,255,255,0.06);color:#aaa;" onclick="resetAiPrompt('both')">↩ Reset All to Default</button>
+        </div>
+        <div class="form-msg" id="ai-prompt-msg"></div>
+      </div>
+
+      <!-- Danger Zone -->
+      <div class="settings-card">
+        <h3>⚠️ Danger Zone</h3>
+        <p style="font-size:13px;color:#aaa;margin-bottom:16px;">Reset all generated BD name records. Cannot be undone.</p>
+        <button class="btn btn-red" onclick="resetNames()">🗑️ Reset All Used Names</button>
+        <div class="form-msg" id="danger-msg"></div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<div id="toast"></div>
+
+<script>
+// ── Ban / Unban ──
+let bannedData = [];
+
+async function loadBanned() {
+  try {
+    const res = await fetch('/api/banned');
+    if (!res.ok) { toast('Banned list লোড ব্যর্থ: ' + res.status, true); return; }
+    const data = await res.json();
+    bannedData = data.entries || [];
+    const cnt = document.getElementById('banned-count');
+    if (cnt) cnt.textContent = `মোট ব্যান: ${data.total} জন`;
+    renderBanned(bannedData);
+  } catch { toast('নেটওয়ার্ক ত্রুটি', true); }
+}
+
+function renderBanned(entries) {
+  const tbody = document.getElementById('banned-tbody');
+  if (!tbody) return;
+  if (!entries.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:#555;">কোনো ব্যান করা ইউজার নেই।</td></tr>';
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  entries.forEach((e, i) => {
+    const tr = document.createElement('tr');
+
+    const tdIdx = document.createElement('td'); tdIdx.textContent = i + 1; tr.appendChild(tdIdx);
+
+    const tdUser = document.createElement('td');
+    const userDiv = document.createElement('div'); userDiv.className = 'usage-user';
+    const uname = document.createElement('span'); uname.className = 'uname';
+    uname.textContent = e.username ? '@' + e.username : '—';
+    const ufirst = document.createElement('span'); ufirst.className = 'ufirst';
+    ufirst.textContent = e.first_name || '';
+    userDiv.appendChild(uname); userDiv.appendChild(ufirst); tdUser.appendChild(userDiv); tr.appendChild(tdUser);
+
+    const tdUid = document.createElement('td');
+    const uid = document.createElement('span'); uid.className = 'usage-uid'; uid.textContent = e.user_id;
+    tdUid.appendChild(uid); tr.appendChild(tdUid);
+
+    const tdReason = document.createElement('td'); tdReason.className = 'reason-cell';
+    tdReason.textContent = e.reason || '—'; tr.appendChild(tdReason);
+
+    const tdTime = document.createElement('td'); tdTime.className = 'usage-time';
+    tdTime.textContent = e.timestamp || '—'; tr.appendChild(tdTime);
+
+    const tdAct = document.createElement('td');
+    const unbanBtn = document.createElement('button'); unbanBtn.className = 'unban-btn';
+    unbanBtn.textContent = '✅ আনব্যান';
+    const label = e.username || e.first_name || String(e.user_id);
+    unbanBtn.addEventListener('click', () => unbanUser(e.user_id, label, tr));
+    tdAct.appendChild(unbanBtn); tr.appendChild(tdAct);
+
+    fragment.appendChild(tr);
+  });
+  tbody.innerHTML = '';
+  tbody.appendChild(fragment);
+}
+
+function bannedSearch() {
+  const q = document.getElementById('banned-search').value.trim().toLowerCase();
+  renderBanned(q ? bannedData.filter(e =>
+    String(e.user_id).includes(q) ||
+    (e.username || '').toLowerCase().includes(q) ||
+    (e.first_name || '').toLowerCase().includes(q)
+  ) : bannedData);
+}
+
+async function banUser(user_id, username, first_name, reason, banBtnEl) {
+  const data = await apiPost('/api/banned/ban', { user_id, username, first_name, reason });
+  if (!data) return;
+  if (!data.success) { toast(data.error, true); return; }
+  toast(data.message);
+  // Replace ban btn with "ব্যান্ড" badge
+  if (banBtnEl) {
+    const badge = document.createElement('span');
+    badge.className = 'banned-badge'; badge.textContent = '🚫 ব্যান্ড';
+    banBtnEl.replaceWith(badge);
+  }
+  // Refresh banned tab data in background so it's ready
+  const res = await fetch('/api/banned');
+  if (res.ok) { const d = await res.json(); bannedData = d.entries || []; }
+}
+
+async function unbanUser(user_id, label, rowEl) {
+  if (!confirm(`"${label}" আনব্যান করবেন?`)) return;
+  const data = await apiPost('/api/banned/unban', { user_id });
+  if (!data) return;
+  if (!data.success) { toast(data.error, true); return; }
+  toast(data.message);
+  bannedData = bannedData.filter(e => e.user_id !== user_id);
+  if (rowEl) rowEl.remove();
+  const cnt = document.getElementById('banned-count');
+  if (cnt) cnt.textContent = `মোট ব্যান: ${bannedData.length} জন`;
+}
+
+async function banManual() {
+  const uid_raw = document.getElementById('ban-uid-input').value.trim();
+  const user_id = parseInt(uid_raw);
+  if (!user_id) { toast('Valid User ID দিন', true); return; }
+  const username   = document.getElementById('ban-uname-input').value.replace('@','').trim();
+  const reason     = document.getElementById('ban-reason-input').value.trim();
+  const data = await apiPost('/api/banned/ban', { user_id, username, first_name: '', reason });
+  if (!data) return;
+  if (!data.success) { toast(data.error, true); return; }
+  toast(data.message);
+  document.getElementById('ban-uid-input').value = '';
+  document.getElementById('ban-uname-input').value = '';
+  document.getElementById('ban-reason-input').value = '';
+  loadBanned();
+}
+
+// ── Usage tab ──
+let usageData = [];    // full list from server
+
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = String(str || '');
+  return d.innerHTML;
+}
+
+async function loadUsage() {
+  try {
+    const res = await fetch('/api/name-usage');
+    if (!res.ok) { toast('Usage লোড ব্যর্থ: ' + res.status, true); return; }
+    const data = await res.json();
+    usageData  = data.entries || [];
+    const cnt  = document.getElementById('usage-count');
+    if (cnt) cnt.textContent = `মোট: ${data.total} টি নাম ব্যবহৃত`;
+    renderUsage(usageData);
+  } catch(err) { toast('নেটওয়ার্ক ত্রুটি', true); }
+}
+
+function renderUsage(entries) {
+  const tbody = document.getElementById('usage-tbody');
+  if (!tbody) return;
+  if (!entries.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:#555;">কোনো তথ্য নেই — এখনো কোনো BD প্রোফাইল জেনারেট হয়নি।</td></tr>';
+    return;
+  }
+  // Build rows safely using DOM — no innerHTML with user data
+  const fragment = document.createDocumentFragment();
+  entries.forEach((e, i) => {
+    const tr = document.createElement('tr');
+
+    // # col
+    const tdIdx = document.createElement('td');
+    tdIdx.textContent = i + 1;
+    tr.appendChild(tdIdx);
+
+    // Name col
+    const tdName = document.createElement('td');
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'usage-name';
+    nameSpan.textContent = e.name;
+    tdName.appendChild(nameSpan);
+    tr.appendChild(tdName);
+
+    // User col
+    const tdUser = document.createElement('td');
+    const userDiv = document.createElement('div');
+    userDiv.className = 'usage-user';
+    const uname = document.createElement('span');
+    uname.className = 'uname';
+    uname.textContent = e.username ? '@' + e.username : '—';
+    const ufirst = document.createElement('span');
+    ufirst.className = 'ufirst';
+    ufirst.textContent = e.first_name || '';
+    userDiv.appendChild(uname);
+    userDiv.appendChild(ufirst);
+    tdUser.appendChild(userDiv);
+    tr.appendChild(tdUser);
+
+    // User ID col
+    const tdUid = document.createElement('td');
+    const uidSpan = document.createElement('span');
+    uidSpan.className = 'usage-uid';
+    uidSpan.textContent = e.user_id;
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'usage-user-reset';
+    resetBtn.textContent = 'নাম মুক্ত করো';
+    const label = e.username || e.first_name || String(e.user_id);
+    resetBtn.addEventListener('click', () => resetUserUsage(e.user_id, label));
+    tdUid.appendChild(uidSpan);
+    tdUid.appendChild(resetBtn);
+    tr.appendChild(tdUid);
+
+    // Time col
+    const tdTime = document.createElement('td');
+    tdTime.className = 'usage-time';
+    tdTime.textContent = e.timestamp;
+    tr.appendChild(tdTime);
+
+    // Action col — ban + delete
+    const tdDel = document.createElement('td');
+    tdDel.style.whiteSpace = 'nowrap';
+
+    const banBtn = document.createElement('button');
+    banBtn.className = 'ban-btn';
+    banBtn.style.marginRight = '6px';
+    banBtn.textContent = '🚫 ব্যান';
+    banBtn.addEventListener('click', () => {
+      const reason = prompt(`"${e.username || e.first_name || e.user_id}" ব্যানের কারণ (optional):`);
+      if (reason === null) return; // cancelled
+      banUser(e.user_id, e.username, e.first_name, reason, banBtn);
+    });
+    tdDel.appendChild(banBtn);
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'usage-del';
+    delBtn.title = 'মুছুন';
+    delBtn.textContent = '🗑️';
+    delBtn.addEventListener('click', () => deleteUsageEntry(e.name, tr));
+    tdDel.appendChild(delBtn);
+    tr.appendChild(tdDel);
+
+    fragment.appendChild(tr);
+  });
+  tbody.innerHTML = '';
+  tbody.appendChild(fragment);
+}
+
+function usageSearch() {
+  const q = document.getElementById('usage-search').value.trim().toLowerCase();
+  if (!q) { renderUsage(usageData); return; }
+  renderUsage(usageData.filter(e =>
+    e.name.toLowerCase().includes(q) ||
+    e.username.toLowerCase().includes(q) ||
+    e.first_name.toLowerCase().includes(q) ||
+    String(e.user_id).includes(q)
+  ));
+}
+
+async function apiPost(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) { toast(`Server error: ${res.status}`, true); return null; }
+  return await res.json();
+}
+
+async function deleteUsageEntry(name, rowEl) {
+  if (!confirm(`"${name}" মুছে নামটি মুক্ত করবেন?`)) return;
+  const data = await apiPost('/api/name-usage/delete', { name });
+  if (!data) return;
+  if (!data.success) { toast(data.error, true); return; }
+  toast(data.message);
+  rowEl.remove();
+  usageData = usageData.filter(e => e.name !== name);
+  const cnt = document.getElementById('usage-count');
+  if (cnt) cnt.textContent = `মোট: ${usageData.length} টি নাম ব্যবহৃত`;
+}
+
+async function resetUserUsage(user_id, label) {
+  if (!confirm(`"${label}"-এর সব নাম মুছে মুক্ত করবেন?`)) return;
+  const data = await apiPost('/api/name-usage/reset-user', { user_id });
+  if (!data) return;
+  if (!data.success) { toast(data.error, true); return; }
+  toast(data.message);
+  usageData = usageData.filter(e => e.user_id !== user_id);
+  renderUsage(usageData);
+  const cnt = document.getElementById('usage-count');
+  if (cnt) cnt.textContent = `মোট: ${usageData.length} টি নাম ব্যবহৃত`;
+}
+
+async function resetAllUsage() {
+  if (!confirm('সমস্ত ট্র্যাকিং ডেটা মুছে সব BD নাম মুক্ত করবেন?')) return;
+  const data = await apiPost('/api/name-usage/reset-all');
+  if (!data) return;
+  if (!data.success) { toast(data.error, true); return; }
+  toast(data.message);
+  usageData = [];
+  renderUsage([]);
+  const cnt = document.getElementById('usage-count');
+  if (cnt) cnt.textContent = 'মোট: 0 টি নাম ব্যবহৃত';
+}
+
+// ── Names management ──
+async function addNames(kind, inputId) {
+  const input = document.getElementById(inputId);
+  const raw   = input.value.trim();
+  if (!raw) return;
+  const names = raw.split(/[,،\n]+/).map(s => s.trim()).filter(Boolean);
+  const res   = await fetch('/api/names/add', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({kind, names})
+  });
+  const data = await res.json();
+  if (!data.success) { toast(data.error, true); return; }
+  input.value = '';
+  toast(data.message);
+  updateCombinations(data.total_combinations);
+  // Append new tags to list
+  const listEl = document.getElementById(kind === 'bd_first_names' ? 'list-first' : kind === 'bd_last_names' ? 'list-last' : 'list-prefix');
+  const cntEl  = document.getElementById(kind === 'bd_first_names' ? 'cnt-first' : kind === 'bd_last_names' ? 'cnt-last' : 'cnt-prefix');
+  cntEl.textContent = data.total;
+  // Re-fetch and re-render list
+  refreshNamesList(kind, listEl, cntEl);
+}
+
+async function deleteName(kind, name, tagEl) {
+  const res  = await fetch('/api/names/delete', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({kind, name})
+  });
+  const data = await res.json();
+  if (!data.success) { toast(data.error, true); return; }
+  tagEl.remove();
+  updateCombinations(data.total_combinations);
+  const cntEl = document.getElementById(kind === 'bd_first_names' ? 'cnt-first' : kind === 'bd_last_names' ? 'cnt-last' : 'cnt-prefix');
+  if (cntEl) cntEl.textContent = data.total;
+  toast(data.message);
+}
+
+async function resetDefaults(kind) {
+  const label = kind === 'bd_first_names' ? 'First Names' : kind === 'bd_last_names' ? 'Last Names' : 'Prefixes';
+  if (!confirm(`${label} ডিফল্টে রিসেট করবেন?`)) return;
+  const res  = await fetch('/api/names/reset-defaults', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({kind})
+  });
+  const data = await res.json();
+  if (!data.success) { toast(data.error, true); return; }
+  toast(data.message);
+  updateCombinations(data.total_combinations);
+  const listEl = document.getElementById(kind === 'bd_first_names' ? 'list-first' : kind === 'bd_last_names' ? 'list-last' : 'list-prefix');
+  const cntEl  = document.getElementById(kind === 'bd_first_names' ? 'cnt-first' : kind === 'bd_last_names' ? 'cnt-last' : 'cnt-prefix');
+  refreshNamesList(kind, listEl, cntEl);
+}
+
+async function refreshNamesList(kind, listEl, cntEl) {
+  const res  = await fetch('/api/names');
+  const data = await res.json();
+  const items = data[kind] || [];
+  cntEl.textContent = items.length;
+  const isPfx = kind === 'bd_prefixes';
+  listEl.innerHTML = items.sort().map(n => `
+    <span class="name-tag${isPfx ? ' prefix-tag' : ''}" data-kind="${kind}" data-name="${n}">
+      ${n} <button onclick="deleteName('${kind}','${n}',this.parentElement)">×</button>
+    </span>`).join('');
+}
+
+function updateCombinations(total) {
+  const el = document.getElementById('cnt-combo');
+  if (el) el.textContent = total.toLocaleString();
+  const stat = document.getElementById('stat-total');
+  if (stat) stat.textContent = total.toLocaleString();
+}
+
+// ── Tab switching ──
+function switchTab(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'usage')     loadUsage();
+  if (name === 'banned')    loadBanned();
+  if (name === 'countries') loadCountries();
+  if (name === 'settings')  { loadBotConfigForm(); loadFieldsConfig(); loadAiPrompts(); }
+  if (name === 'texts')     loadBotTexts();
+  if (name === 'generate')  loadCountrySelect();
+  if (name === 'users')     loadUsers();
+  if (name === 'broadcast') loadBroadcastUserCount();
+  if (name === 'schedule')  loadSchedules();
+  if (name === 'sendmedia') loadSendMediaUsers();
+  if (name === 'files')     loadStoredFiles();
+}
+
+// ── Countries management ──
+let countriesData = {};
+
+async function loadCountries() {
+  const res = await fetch('/api/countries');
+  if (!res.ok) { toast('Countries লোড ব্যর্থ', true); return; }
+  const data = await res.json();
+  countriesData = data.countries || {};
+  renderCountries();
+  loadCountrySelect();
+}
+
+function renderCountries() {
+  const tbody = document.getElementById('country-tbody');
+  if (!tbody) return;
+  const keys = Object.keys(countriesData);
+  if (!keys.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:#555;">কোনো দেশ নেই।</td></tr>';
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  keys.sort().forEach(key => {
+    const c = countriesData[key];
+    const tr = document.createElement('tr');
+    // digits may be array or legacy string
+    const pats = Array.isArray(c.digits) ? c.digits : [c.digits];
+    const patHtml = pats.map(p =>
+      `<span style="font-family:monospace;font-size:11px;color:#fcd34d;background:#1f1635;padding:2px 6px;border-radius:4px;margin:2px;display:inline-block">${p}</span>`
+    ).join('');
+    const cells = [
+      `<strong style="color:#c4b5fd">${key}</strong>`,
+      `<span style="color:#aaa;font-size:12px">${c.locale}</span>`,
+      `<span style="color:#60a5fa">${c.code}</span>`,
+      `<div style="line-height:1.8">${patHtml}</div>`,
+      c.is_bd ? '<span style="color:#4ade80">✅ BD</span>' : '<span style="color:#888">❌</span>',
+    ];
+    tr.innerHTML = cells.map(h => `<td>${h}</td>`).join('');
+    const tdAct = document.createElement('td');
+    tdAct.style.whiteSpace = 'nowrap';
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn btn-sm btn-blue';
+    editBtn.textContent = '✏️ Edit';
+    editBtn.style.marginRight = '6px';
+    editBtn.addEventListener('click', () => prefillCountryForm(key, c));
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn btn-sm btn-red';
+    delBtn.textContent = '🗑️';
+    delBtn.addEventListener('click', () => deleteCountry(key, tr));
+    tdAct.appendChild(editBtn); tdAct.appendChild(delBtn);
+    tr.appendChild(tdAct);
+    frag.appendChild(tr);
+  });
+  tbody.innerHTML = '';
+  tbody.appendChild(frag);
+}
+
+// ── Pattern row helpers ──
+function addPatternRow(value = '') {
+  const container = document.getElementById('patterns-container');
+  if (container.querySelectorAll('.pattern-row').length >= 10) {
+    toast('সর্বোচ্চ ১০টি pattern যোগ করা যাবে।', true); return;
+  }
+  const div = document.createElement('div');
+  div.className = 'pattern-row';
+  div.style.cssText = 'display:flex;gap:8px;align-items:center;';
+  div.innerHTML = `
+    <input type="text" class="names-input pattern-input" placeholder="e.g. 13XXXXXXXX" value="${value}" style="flex:1;margin:0;"/>
+    <button type="button" class="btn btn-sm btn-red" onclick="removePatternRow(this)" style="padding:4px 10px;" title="সরান">✕</button>`;
+  container.appendChild(div);
+}
+
+function removePatternRow(btn) {
+  const container = document.getElementById('patterns-container');
+  if (container.querySelectorAll('.pattern-row').length <= 1) {
+    toast('কমপক্ষে একটি pattern রাখতে হবে।', true); return;
+  }
+  btn.closest('.pattern-row').remove();
+}
+
+function clearCountryForm() {
+  ['c-key','c-locale','c-code'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('c-isbd').value = 'false';
+  const container = document.getElementById('patterns-container');
+  container.innerHTML = `
+    <div class="pattern-row" style="display:flex;gap:8px;align-items:center;">
+      <input type="text" class="names-input pattern-input" placeholder="e.g. 13XXXXXXXX" style="flex:1;margin:0;"/>
+      <button type="button" class="btn btn-sm btn-red" onclick="removePatternRow(this)" style="padding:4px 10px;" title="সরান">✕</button>
+    </div>`;
+}
+
+function prefillCountryForm(key, c) {
+  document.getElementById('c-key').value    = key;
+  document.getElementById('c-locale').value = c.locale;
+  document.getElementById('c-code').value   = c.code;
+  document.getElementById('c-isbd').value   = c.is_bd ? 'true' : 'false';
+  // Rebuild pattern rows
+  const container = document.getElementById('patterns-container');
+  container.innerHTML = '';
+  const pats = Array.isArray(c.digits) ? c.digits : [c.digits];
+  pats.forEach(p => addPatternRow(p));
+  // Scroll form into view
+  document.getElementById('c-key').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function addCountry() {
+  const key    = document.getElementById('c-key').value.trim().toLowerCase();
+  const locale = document.getElementById('c-locale').value.trim();
+  const code   = document.getElementById('c-code').value.trim();
+  const is_bd  = document.getElementById('c-isbd').value === 'true';
+  const patterns = Array.from(document.querySelectorAll('#patterns-container .pattern-input'))
+    .map(inp => inp.value.trim()).filter(Boolean);
+  if (!key || !locale || !code) { showMsg('country-msg', 'Key, Locale এবং Phone Code দিতে হবে।', true); return; }
+  if (!patterns.length) { showMsg('country-msg', 'কমপক্ষে একটি digit pattern দিতে হবে।', true); return; }
+  const data = await apiPost('/api/countries/add', { key, locale, code, patterns, is_bd });
+  if (!data) return;
+  if (!data.success) { showMsg('country-msg', data.error, true); return; }
+  showMsg('country-msg', data.message, false);
+  toast(data.message);
+  clearCountryForm();
+  await loadCountries();
+}
+
+async function deleteCountry(key, rowEl) {
+  if (!confirm(`"${key}" দেশটি মুছে ফেলবেন?`)) return;
+  const data = await apiPost('/api/countries/delete', { key });
+  if (!data) return;
+  if (!data.success) { toast(data.error, true); return; }
+  toast(data.message);
+  delete countriesData[key];
+  rowEl.remove();
+  loadCountrySelect();
+}
+
+async function loadCountrySelect() {
+  const sel = document.getElementById('country-select');
+  if (!sel) return;
+  if (!Object.keys(countriesData).length) {
+    // fetch if not loaded yet
+    const res = await fetch('/api/countries');
+    if (!res.ok) return;
+    const d = await res.json();
+    countriesData = d.countries || {};
+  }
+  const prev = sel.value;
+  sel.innerHTML = '';
+  Object.keys(countriesData).sort().forEach(key => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = key.charAt(0).toUpperCase() + key.slice(1);
+    sel.appendChild(opt);
+  });
+  if (prev && countriesData[prev]) sel.value = prev;
+}
+
+// ── Bot Config (admin_id, developer_name, nickname_sfx) ──
+async function loadBotConfigForm() {
+  const res = await fetch('/api/bot-config');
+  if (!res.ok) return;
+  const data = await res.json();
+  const aid = document.getElementById('cfg-admin-id');
+  const dev = document.getElementById('cfg-dev-name');
+  const sfx = document.getElementById('cfg-nick-sfx');
+  if (aid) aid.value = data.admin_id || '';
+  if (dev) dev.value = data.developer_name || '';
+  if (sfx) sfx.value = (data.nickname_sfx || []).join(', ');
+}
+
+async function saveBotConfig() {
+  const admin_id_raw    = document.getElementById('cfg-admin-id').value.trim();
+  const developer_name  = document.getElementById('cfg-dev-name').value.trim();
+  const sfx_raw         = document.getElementById('cfg-nick-sfx').value;
+  const nickname_sfx    = sfx_raw.split(',').map(s => s.trim()).filter(s => s !== undefined);
+  // Always include admin_id so the user can also clear it to 0
+  const payload = { admin_id: admin_id_raw !== '' ? admin_id_raw : 0, developer_name, nickname_sfx };
+  const data = await apiPost('/api/bot-config', payload);
+  if (!data) return;
+  showMsg('cfg-msg', data.message || data.error, !data.success);
+  if (data.success) toast(data.message);
+}
+
+// ── Generate Profile ──
+async function generateProfile() {
+  const country = document.getElementById('country-select').value;
+  const res  = await fetch('/api/generate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({country}) });
+  const data = await res.json();
+  if (!data.success) { toast(data.error, true); return; }
+
+  const p = data.profile;
+  const fields = [
+    {label:'Withdrawer Name', value: p.full_name},
+    {label:'Nickname',        value: p.nickname},
+    {label:'Facebook ID',     value: p.facebook_id},
+    {label:'Google',          value: p.google},
+    {label:'WhatsApp',        value: p.whatsapp},
+    {label:'Email',           value: p.email},
+    {label:'Mobile',          value: p.mobile},
+    {label:'Username',        value: p.username},
+  ];
+
+  document.getElementById('profile-grid').innerHTML = fields.map(f => `
+    <div class="profile-field">
+      <div class="f-label">${f.label}</div>
+      <div class="f-value" onclick="copyText('${f.value}')">${f.value}</div>
+      <div class="f-hint">Tap to copy</div>
+    </div>`).join('');
+  document.getElementById('profile-result').style.display = 'block';
+  appendLog(p);
+
+  // Update log count stat
+  const logStat = document.getElementById('stat-log');
+  logStat.textContent = (parseInt(logStat.textContent.replace(/,/g,'')) + 1).toLocaleString();
+}
+
+function appendLog(p) {
+  if (!document.querySelector('.log-table')) {
+    document.getElementById('log-area').innerHTML =
+      `<table class="log-table"><thead><tr><th>#</th><th>Country</th><th>Name</th><th>Username</th><th>Email</th><th>Mobile</th></tr></thead><tbody></tbody></table>`;
+  }
+  const badgeCls = ['bangladesh','bd'].includes(p.country) ? 'badge-bd' : 'badge-int';
+  const rows = document.querySelectorAll('.log-table tbody tr').length + 1;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td style="color:#666">${rows}</td>
+    <td><span class="badge ${badgeCls}">${p.country.charAt(0).toUpperCase()+p.country.slice(1)}</span></td>
+    <td>${p.full_name}</td><td>${p.username}</td><td>${p.email}</td><td>${p.mobile}</td>`;
+  document.querySelector('.log-table tbody').prepend(tr);
+}
+
+// ── Bot Token ──
+async function setBotToken() {
+  const token = document.getElementById('bot-token-input').value.trim();
+  if (!token) { showMsg('bot-msg', 'Please enter a token.', true); return; }
+  showMsg('bot-msg', 'Connecting...', false, '#aaa');
+  const res  = await fetch('/api/set-bot-token', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({token}) });
+  const data = await res.json();
+  showMsg('bot-msg', data.message || data.error, !data.success);
+  if (data.success) {
+    document.getElementById('bot-token-input').value = '';
+    toast('Bot connected! 🎉');
+    setTimeout(() => location.reload(), 1500);
+  }
+}
+
+async function stopBot() {
+  const res  = await fetch('/api/stop-bot', { method:'POST' });
+  const data = await res.json();
+  toast(data.message || 'Bot stopped.');
+  setTimeout(() => location.reload(), 1200);
+}
+
+// ── Password change ──
+async function changePassword() {
+  const cur  = document.getElementById('cur-pass').value;
+  const nw   = document.getElementById('new-pass').value;
+  const conf = document.getElementById('confirm-pass').value;
+  if (nw !== conf) { showMsg('pass-msg', 'Passwords do not match.', true); return; }
+  if (nw.length < 6) { showMsg('pass-msg', 'Minimum 6 characters.', true); return; }
+  const res  = await fetch('/api/change-password', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({current: cur, new: nw}) });
+  const data = await res.json();
+  showMsg('pass-msg', data.message || data.error, !data.success);
+  if (data.success) {
+    toast('Password updated! Logging out...');
+    setTimeout(() => window.location.href = '/logout', 2000);
+  }
+}
+
+// ── AI Prompt Customizer ──
+async function loadAiPrompts() {
+  try {
+    const res = await fetch('/api/ai-prompts');
+    if (!res.ok) return;
+    const data = await res.json();
+    const bdEl   = document.getElementById('ai-prompt-bd');
+    const intlEl = document.getElementById('ai-prompt-intl');
+    if (bdEl)   bdEl.value   = data.bd   || '';
+    if (intlEl) intlEl.value = data.intl || '';
+  } catch(e) { console.error('loadAiPrompts:', e); }
+}
+
+async function saveAiPrompts() {
+  const bd   = (document.getElementById('ai-prompt-bd')   || {}).value || '';
+  const intl = (document.getElementById('ai-prompt-intl') || {}).value || '';
+  if (!bd.trim())   { showMsg('ai-prompt-msg', 'BD prompt খালি রাখা যাবে না।', true); return; }
+  if (!intl.trim()) { showMsg('ai-prompt-msg', 'International prompt খালি রাখা যাবে না।', true); return; }
+  const data = await apiPost('/api/ai-prompts', { bd, intl });
+  if (!data) return;
+  showMsg('ai-prompt-msg', data.message || data.error, !data.success);
+  if (data.success) toast('AI Prompt সেভ হয়েছে ✓');
+}
+
+async function resetAiPrompt(kind) {
+  const label = {bd:'BD', intl:'International', both:'সব'}[kind] || 'সব';
+  if (!confirm(`${label} prompt ডিফল্টে ফিরিয়ে দেবেন?`)) return;
+  const data = await apiPost('/api/ai-prompts/reset', { kind });
+  if (!data) return;
+  const bdEl   = document.getElementById('ai-prompt-bd');
+  const intlEl = document.getElementById('ai-prompt-intl');
+  if (bdEl   && data.bd)   bdEl.value   = data.bd;
+  if (intlEl && data.intl) intlEl.value = data.intl;
+  showMsg('ai-prompt-msg', data.message || data.error, !data.success);
+  if (data.success) toast(data.message);
+}
+
+// ── Reset names ──
+async function resetNames() {
+  if (!confirm('সমস্ত ব্যবহৃত BD নাম রিসেট করবেন?')) return;
+  const res  = await fetch('/api/reset', { method:'POST' });
+  const data = await res.json();
+  showMsg('danger-msg', data.message, false);
+  document.getElementById('home-msg').textContent = data.message;
+  toast('Names reset ✓');
+  refreshStats();
+}
+
+// ── Refresh stats ──
+async function refreshStats() {
+  const res  = await fetch('/api/stats');
+  const data = await res.json();
+  document.getElementById('stat-used').textContent      = data.used_count.toLocaleString();
+  document.getElementById('stat-remaining').textContent = data.remaining.toLocaleString();
+  document.getElementById('stat-log').textContent       = data.log_count.toLocaleString();
+  document.getElementById('home-msg').textContent = 'Stats refreshed ✓';
+}
+
+// ── Helpers ──
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => toast('Copied! ✓'));
+}
+
+function showMsg(id, text, isError, color) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className   = 'form-msg ' + (isError ? 'error' : 'success');
+  if (color) el.style.color = color;
+  el.style.display = 'block';
+}
+
+function toast(msg, isErr) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = 'show' + (isErr ? ' err' : '');
+  setTimeout(() => t.className = '', 2500);
+}
+
+// ── User Stats tab ──
+let usersData = [];
+
+async function loadUsers() {
+  try {
+    const res = await fetch('/api/user-stats');
+    if (!res.ok) { toast('User stats লোড ব্যর্থ', true); return; }
+    const data = await res.json();
+    usersData = data.entries || [];
+    const cnt = document.getElementById('users-count');
+    if (cnt) cnt.textContent = `মোট ইউজার: ${data.total} জন`;
+    renderUsers(usersData);
+  } catch { toast('নেটওয়ার্ক ত্রুটি', true); }
+}
+
+function renderUsers(entries) {
+  const tbody = document.getElementById('users-tbody');
+  if (!tbody) return;
+  if (!entries.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:#555;">কোনো ইউজার ডেটা নেই — বটে কেউ মেসেজ পাঠালে এখানে দেখাবে।</td></tr>';
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  entries.forEach((e, i) => {
+    const tr = document.createElement('tr');
+
+    const tdIdx = document.createElement('td'); tdIdx.textContent = i + 1; tr.appendChild(tdIdx);
+
+    const tdUser = document.createElement('td');
+    const userDiv = document.createElement('div'); userDiv.className = 'usage-user';
+    const uname = document.createElement('span'); uname.className = 'uname';
+    uname.textContent = e.username ? '@' + e.username : '—';
+    const ufirst = document.createElement('span'); ufirst.className = 'ufirst';
+    ufirst.textContent = e.first_name || '';
+    userDiv.appendChild(uname); userDiv.appendChild(ufirst); tdUser.appendChild(userDiv); tr.appendChild(tdUser);
+
+    const tdUid = document.createElement('td');
+    const uid = document.createElement('span'); uid.className = 'usage-uid'; uid.textContent = e.user_id;
+    tdUid.appendChild(uid); tr.appendChild(tdUid);
+
+    const tdCount = document.createElement('td'); tdCount.style.textAlign = 'center';
+    const countBadge = document.createElement('span');
+    countBadge.style.cssText = 'background:rgba(124,99,245,0.2);color:#c4b5fd;border:1px solid rgba(124,99,245,0.35);border-radius:12px;padding:2px 10px;font-weight:700;font-size:13px;';
+    countBadge.textContent = (e.profile_count || 0).toLocaleString();
+    tdCount.appendChild(countBadge); tr.appendChild(tdCount);
+
+    const tdTime = document.createElement('td'); tdTime.className = 'usage-time';
+    tdTime.textContent = e.last_seen || '—'; tr.appendChild(tdTime);
+
+    frag.appendChild(tr);
+  });
+  tbody.innerHTML = '';
+  tbody.appendChild(frag);
+}
+
+function usersSearch() {
+  const q = document.getElementById('users-search').value.trim().toLowerCase();
+  renderUsers(q ? usersData.filter(e =>
+    String(e.user_id).includes(q) ||
+    (e.username || '').toLowerCase().includes(q) ||
+    (e.first_name || '').toLowerCase().includes(q)
+  ) : usersData);
+}
+
+// ── Broadcast tab ──
+let bcPollTimer = null;
+
+async function loadBroadcastUserCount() {
+  try {
+    const res = await fetch('/api/user-stats');
+    if (!res.ok) return;
+    const data = await res.json();
+    const el = document.getElementById('broadcast-user-count');
+    if (el) el.textContent = `মোট ${data.total} জন ইউজার পাবেন`;
+  } catch {}
+}
+
+async function startBroadcast() {
+  const text = (document.getElementById('broadcast-text').value || '').trim();
+  if (!text) { showMsg('broadcast-msg', 'মেসেজ লিখুন।', true); return; }
+  const btn = document.getElementById('broadcast-btn');
+  btn.disabled = true; btn.textContent = 'পাঠানো হচ্ছে…';
+  const data = await apiPost('/api/broadcast', { text });
+  btn.disabled = false; btn.textContent = '📢 Send to All';
+  if (!data) return;
+  if (!data.success) { showMsg('broadcast-msg', data.error, true); return; }
+  showMsg('broadcast-msg', data.message, false);
+  document.getElementById('broadcast-progress-card').style.display = 'block';
+  document.getElementById('bc-done-msg').style.display = 'none';
+  document.getElementById('bc-total').textContent = data.total;
+  if (bcPollTimer) clearInterval(bcPollTimer);
+  bcPollTimer = setInterval(pollBroadcastStatus, 800);
+}
+
+async function pollBroadcastStatus() {
+  try {
+    const res = await fetch('/api/broadcast-status');
+    if (!res.ok) return;
+    const s = await res.json();
+    document.getElementById('bc-sent').textContent   = s.sent;
+    document.getElementById('bc-failed').textContent = s.failed;
+    document.getElementById('bc-total').textContent  = s.total;
+    document.getElementById('bc-fraction').textContent = `${s.sent + s.failed} / ${s.total}`;
+    const pct = s.total > 0 ? Math.round(((s.sent + s.failed) / s.total) * 100) : 0;
+    document.getElementById('bc-bar').style.width = pct + '%';
+    if (s.done && !s.running) {
+      clearInterval(bcPollTimer); bcPollTimer = null;
+      document.getElementById('bc-done-msg').style.display = 'block';
+    }
+  } catch {}
+}
+
+// ── Custom Fields (Settings tab) ──
+let allFields = [];
+
+async function loadFieldsConfig() {
+  try {
+    const res = await fetch('/api/fields-config');
+    if (!res.ok) return;
+    const data = await res.json();
+    allFields = data.all_fields || [];
+    const enabled = new Set(data.enabled || []);
+    const container = document.getElementById('fields-checkboxes');
+    if (!container) return;
+    container.innerHTML = '';
+    allFields.forEach(f => {
+      const label = document.createElement('label');
+      label.style.cssText = 'display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.value = f.key; cb.checked = enabled.has(f.key);
+      cb.style.cssText = 'width:16px;height:16px;accent-color:#7c63f5;cursor:pointer;';
+      const txt = document.createTextNode(`${f.emoji} ${f.label}`);
+      label.appendChild(cb); label.appendChild(txt);
+      container.appendChild(label);
+    });
+  } catch {}
+}
+
+async function saveFieldsConfig() {
+  const checkboxes = document.querySelectorAll('#fields-checkboxes input[type=checkbox]');
+  const enabled = [...checkboxes].filter(cb => cb.checked).map(cb => cb.value);
+  if (!enabled.length) { showMsg('fields-msg', 'অন্তত একটি ফিল্ড চালু রাখতে হবে।', true); return; }
+  const data = await apiPost('/api/fields-config', { enabled });
+  if (!data) return;
+  showMsg('fields-msg', data.message || data.error, !data.success);
+  if (data.success) toast(data.message);
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Schedule Tab
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const WEEKDAY_NAMES = ['সোমবার','মঙ্গলবার','বুধবার','বৃহস্পতিবার','শুক্রবার','শনিবার','রবিবার'];
+
+function toggleWeekday() {
+  const repeat = document.getElementById('sch-repeat').value;
+  document.getElementById('sch-weekday-wrap').style.display = repeat === 'weekly' ? '' : 'none';
+}
+
+async function addSchedule() {
+  const text    = (document.getElementById('sch-text').value || '').trim();
+  const time    = (document.getElementById('sch-time').value || '').trim();
+  const repeat  = document.getElementById('sch-repeat').value;
+  const weekday = document.getElementById('sch-weekday').value;
+  if (!text) { showMsg('sch-msg', 'মেসেজ লিখুন।', true); return; }
+  if (!time) { showMsg('sch-msg', 'সময় দিন।', true); return; }
+  const data = await apiPost('/api/schedules', { text, time, repeat, weekday: parseInt(weekday) });
+  if (!data) return;
+  if (!data.success) { showMsg('sch-msg', data.error, true); return; }
+  showMsg('sch-msg', data.message, false);
+  document.getElementById('sch-text').value = '';
+  document.getElementById('sch-time').value = '';
+  toast('✅ Schedule যোগ হয়েছে!');
+  loadSchedules();
+}
+
+async function loadSchedules() {
+  try {
+    const res = await fetch('/api/schedules');
+    if (!res.ok) { return; }
+    const data = await res.json();
+    renderSchedules(data.schedules || []);
+  } catch {}
+}
+
+function renderSchedules(list) {
+  const el = document.getElementById('sch-list');
+  if (!list.length) {
+    el.innerHTML = '<p style="color:#666;font-size:14px;text-align:center;padding:30px;">কোনো schedule নেই। উপরে যোগ করুন।</p>';
+    return;
+  }
+  el.innerHTML = '';
+  list.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'sch-card' + (s.active ? '' : ' inactive');
+    card.dataset.id = s.id;
+
+    const repeatLabel = s.repeat === 'daily' ? 'প্রতিদিন' : s.repeat === 'weekly' ? `সাপ্তাহিক (${WEEKDAY_NAMES[s.weekday||0]})` : 'একবার';
+    const nextRun = s.next_run ? s.next_run.replace('T',' ') : '—';
+
+    card.innerHTML = `
+      <div class="sch-info">
+        <div class="sch-text">${escHtml(s.text)}</div>
+        <div class="sch-meta">
+          <span>⏰ ${s.time}</span>
+          <span class="sch-badge ${s.repeat}">${repeatLabel}</span>
+          <span>📅 পরের রান: ${nextRun}</span>
+          ${s.active ? '<span style="color:#4ade80">● চালু</span>' : '<span style="color:#f87171">● বন্ধ</span>'}
+        </div>
+      </div>
+      <div class="sch-actions">
+        <button class="btn btn-sm ${s.active ? 'btn-orange' : 'btn-green'}" onclick="toggleSchedule('${s.id}',this.closest('.sch-card'))">
+          ${s.active ? '⏸ বন্ধ করুন' : '▶ চালু করুন'}
+        </button>
+        <button class="btn btn-sm btn-red" onclick="deleteSchedule('${s.id}',this.closest('.sch-card'))">🗑️</button>
+      </div>`;
+    el.appendChild(card);
+  });
+}
+
+function escHtml(str) {
+  const d = document.createElement('div'); d.textContent = str; return d.innerHTML;
+}
+
+async function toggleSchedule(id, cardEl) {
+  const data = await apiPost('/api/schedules/toggle', { id });
+  if (!data) return;
+  if (!data.success) { toast(data.error, true); return; }
+  toast(data.message);
+  loadSchedules();
+}
+
+async function deleteSchedule(id, cardEl) {
+  if (!confirm('এই schedule মুছে ফেলবেন?')) return;
+  const data = await apiPost('/api/schedules/delete', { id });
+  if (!data) return;
+  if (!data.success) { toast(data.error, true); return; }
+  toast(data.message);
+  if (cardEl) cardEl.remove();
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Send Media Tab
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let _smType = 'text';
+let _smSendHistory = [];
+
+function toggleTarget() {
+  const target = document.querySelector('input[name="sm-target"]:checked').value;
+  document.getElementById('sm-uid-wrap').style.display = target === 'user' ? '' : 'none';
+}
+
+function setMediaType(type, btn) {
+  _smType = type;
+  document.querySelectorAll('.sm-type-btn').forEach(b => b.classList.remove('active-type'));
+  btn.classList.add('active-type');
+  document.getElementById('sm-text-wrap').style.display    = type === 'text' ? '' : 'none';
+  document.getElementById('sm-file-wrap').style.display    = type !== 'text' ? '' : 'none';
+  document.getElementById('sm-caption-wrap').style.display = type !== 'text' ? '' : 'none';
+  // Update drop zone icon
+  const icons = {photo:'🖼️', video:'🎬', audio:'🎵', document:'📄'};
+  const icon = document.getElementById('sm-drop-icon');
+  if (icon && icons[type]) icon.textContent = icons[type];
+}
+
+function onFileSelected(input) {
+  const file = input.files[0];
+  if (file) document.getElementById('sm-file-name').textContent = '✅ ' + file.name;
+}
+
+function handleFileDrop(event) {
+  event.preventDefault();
+  event.currentTarget.style.borderColor = 'rgba(124,99,245,0.4)';
+  const file = event.dataTransfer.files[0];
+  if (!file) return;
+  const inp = document.getElementById('sm-file');
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  inp.files = dt.files;
+  document.getElementById('sm-file-name').textContent = '✅ ' + file.name;
+}
+
+async function loadSendMediaUsers() {
+  // Pre-populate user ID if users tab data is available
+}
+
+async function sendMedia() {
+  const target  = document.querySelector('input[name="sm-target"]:checked').value;
+  const userId  = (document.getElementById('sm-userid').value || '').trim();
+  const caption = (document.getElementById('sm-caption').value || '').trim();
+  const text    = (document.getElementById('sm-text').value || '').trim();
+  const fileInp = document.getElementById('sm-file');
+
+  if (target === 'user' && !userId) { showMsg('sm-msg', 'User ID দিন।', true); return; }
+  if (_smType === 'text' && !text)  { showMsg('sm-msg', 'মেসেজ লিখুন।', true); return; }
+  if (_smType !== 'text' && !fileInp.files.length) { showMsg('sm-msg', 'ফাইল সিলেক্ট করুন।', true); return; }
+
+  const btn = document.getElementById('sm-send-btn');
+  btn.disabled = true; btn.textContent = 'পাঠানো হচ্ছে…';
+
+  const fd = new FormData();
+  fd.append('type',    _smType);
+  fd.append('target',  target);
+  fd.append('user_id', userId);
+  fd.append('caption', caption);
+  fd.append('text',    text);
+  if (_smType !== 'text' && fileInp.files[0]) fd.append('file', fileInp.files[0]);
+
+  try {
+    const res  = await fetch('/api/send-media', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!data.success) { showMsg('sm-msg', data.error, true); }
+    else {
+      showMsg('sm-msg', data.message, false);
+      toast(data.message);
+      // Log to history
+      const typeLabels = {text:'💬 টেক্সট', photo:'🖼️ ছবি', video:'🎬 ভিডিও', audio:'🎵 অডিও', document:'📄 ফাইল'};
+      _smSendHistory.unshift({
+        type: typeLabels[_smType] || _smType,
+        target: target === 'all' ? 'সব ইউজার' : `User ${userId}`,
+        sent: data.sent, failed: data.failed,
+        time: new Date().toLocaleTimeString('bn-BD')
+      });
+      renderSendHistory();
+    }
+  } catch (e) { showMsg('sm-msg', 'নেটওয়ার্ক ত্রুটি: ' + e, true); }
+
+  btn.disabled = false; btn.textContent = '📨 পাঠান';
+}
+
+function renderSendHistory() {
+  const el = document.getElementById('sm-history');
+  if (!_smSendHistory.length) {
+    el.innerHTML = '<span style="color:#666">এই session-এ কিছু পাঠানো হয়নি।</span>';
+    return;
+  }
+  el.innerHTML = _smSendHistory.slice(0, 20).map(h => `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+      <span style="font-size:18px">${h.type.split(' ')[0]}</span>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:600;color:#e0d7ff;">${h.type} → ${escHtml(h.target)}</div>
+        <div style="font-size:12px;color:#666;">✅ ${h.sent} সফল ${h.failed ? `❌ ${h.failed} ব্যর্থ` : ''} · ${h.time}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ── Stored files for user downloads ──
+function toggleFileAccess() {
+  const mode = document.getElementById('file-access').value;
+  document.getElementById('file-allowed-wrap').style.display = mode === 'selected' ? '' : 'none';
+}
+
+function toggleFileSource() {
+  const source = document.getElementById('file-source').value;
+  document.getElementById('channel-source-wrap').style.display = source === 'channel' ? '' : 'none';
+  document.getElementById('uploaded-file-wrap').style.display = source === 'upload' ? '' : 'none';
+  const btn = document.getElementById('file-upload-btn');
+  btn.textContent = source === 'channel' ? '🔗 Channel file সেভ করুন' : '📤 ফাইল সেভ করুন';
+}
+
+async function loadStoredFiles() {
+  try {
+    const res = await fetch('/api/files');
+    const data = await res.json();
+    if (!data.success) { toast(data.error || 'ফাইল লোড ব্যর্থ', true); return; }
+    renderStoredFiles(data.files || []);
+  } catch { toast('নেটওয়ার্ক ত্রুটি', true); }
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function renderStoredFiles(files) {
+  const el = document.getElementById('stored-files-list');
+  if (!el) return;
+  if (!files.length) {
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:#666;">কোনো ফাইল নেই। উপরের ফর্ম দিয়ে আপলোড করুন।</div>';
+    return;
+  }
+  el.innerHTML = files.map(f => `
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.07);">
+      <div style="font-size:25px;">${f.storage === 'telegram_channel' ? '🔗' : '📄'}</div>
+      <div style="flex:1;min-width:200px;">
+        <div style="font-weight:700;color:#e0d7ff;">${escHtml(f.title)}</div>
+        <div style="font-size:12px;color:#999;margin-top:4px;">
+          ${f.storage === 'telegram_channel'
+            ? `Private channel · message ${escHtml(String(f.source_message_id || ''))}`
+            : `${escHtml(f.filename)} · ${formatFileSize(f.size)}`}
+        </div>
+        <div style="font-size:12px;color:#a78bfa;margin-top:3px;">/download ${escHtml(f.command)}
+          · ${escHtml(f.category || 'General')}${f.version ? ` · v${escHtml(f.version)}` : ''}</div>
+        <div style="font-size:12px;color:#4ade80;margin-top:3px;">
+          📥 ${Number(f.downloads || 0).toLocaleString()} downloads
+          · ${f.access_mode === 'selected' ? '🔒 নির্দিষ্ট users' : '🌐 সবাই'}
+          ${f.expires_at ? ` · ⏳ ${escHtml(f.expires_at)}` : ''}
+        </div>
+      </div>
+      <button class="btn btn-sm btn-red" onclick="deleteStoredFile('${f.id}')">🗑️ Delete</button>
+    </div>`).join('');
+}
+
+async function saveStoredFile() {
+  const title = (document.getElementById('file-title').value || '').trim();
+  const command = (document.getElementById('file-command').value || '').trim().toLowerCase().replace(/^\//, '');
+  const caption = (document.getElementById('file-caption').value || '').trim();
+  const category = (document.getElementById('file-category').value || '').trim();
+  const version = (document.getElementById('file-version').value || '').trim();
+  const access = document.getElementById('file-access').value;
+  const allowed = (document.getElementById('file-allowed').value || '').trim();
+  const expiry = (document.getElementById('file-expiry').value || '').trim();
+  const replace = document.getElementById('file-replace').checked;
+  const source = document.getElementById('file-source').value;
+  const input = document.getElementById('stored-file');
+  if (!title) { showMsg('file-msg', 'ফাইলের নাম দিন।', true); return; }
+  if (!/^[a-z][a-z0-9_]{1,31}$/.test(command)) {
+    showMsg('file-msg', 'কমান্ড 2–32 অক্ষরের ইংরেজি ছোট হাতের অক্ষর, সংখ্যা বা _ হতে হবে।', true); return;
+  }
+  if (access === 'selected' && !allowed) { showMsg('file-msg', 'Allowed User ID দিন।', true); return; }
+  if (source === 'upload' && !input.files.length) { showMsg('file-msg', 'ফাইল সিলেক্ট করুন।', true); return; }
+  if (source === 'upload' && input.files[0].size > 50 * 1024 * 1024) { showMsg('file-msg', 'ফাইলের সর্বোচ্চ সাইজ 50 MB।', true); return; }
+  if (source === 'channel') {
+    const channelId = (document.getElementById('file-channel-id').value || '').trim();
+    const messageId = (document.getElementById('file-message-id').value || '').trim();
+    if (!channelId || !messageId) {
+      showMsg('file-msg', 'Private channel ID এবং Message ID দিন।', true); return;
+    }
+  }
+  const btn = document.getElementById('file-upload-btn');
+  btn.disabled = true; btn.textContent = 'সেভ হচ্ছে…';
+  const fd = new FormData();
+  fd.append('title', title); fd.append('command', command);
+  fd.append('caption', caption); fd.append('category', category);
+  fd.append('version', version); fd.append('access_mode', access);
+  fd.append('allowed_users', allowed); fd.append('expires_at', expiry);
+  fd.append('replace', replace ? '1' : '0');
+  let endpoint = '/api/files/upload';
+  if (source === 'upload') {
+    fd.append('file', input.files[0]);
+  } else {
+    endpoint = '/api/files/channel';
+    fd.append('source_chat_id', document.getElementById('file-channel-id').value.trim());
+    fd.append('source_message_id', document.getElementById('file-message-id').value.trim());
+  }
+  try {
+    const res = await fetch(endpoint, { method:'POST', body:fd });
+    const data = await res.json();
+    showMsg('file-msg', data.message || data.error, !data.success);
+    if (data.success) {
+      toast(data.message); document.getElementById('file-title').value = '';
+      document.getElementById('file-command').value = ''; document.getElementById('file-caption').value = '';
+      document.getElementById('file-category').value = ''; document.getElementById('file-version').value = '';
+      document.getElementById('file-allowed').value = ''; document.getElementById('file-expiry').value = '';
+      document.getElementById('file-replace').checked = false; document.getElementById('file-access').value = 'all';
+      document.getElementById('file-source').value = 'upload';
+      document.getElementById('file-channel-id').value = '';
+      document.getElementById('file-message-id').value = '';
+      toggleFileAccess(); toggleFileSource();
+      input.value = ''; loadStoredFiles();
+    }
+  } catch { showMsg('file-msg', 'নেটওয়ার্ক ত্রুটি', true); }
+  btn.disabled = false; btn.textContent = '📤 ফাইল সেভ করুন';
+}
+
+async function deleteStoredFile(id) {
+  if (!confirm('এই ফাইলটি মুছে ফেলবেন?')) return;
+  const data = await apiPost('/api/files/delete', { id });
+  if (!data) return;
+  if (!data.success) { toast(data.error, true); return; }
+  toast(data.message); loadStoredFiles();
+}
+
+// ── Bot Texts (✏️ Texts tab) ──
+const BOT_TEXT_META = [
+  { key:"welcome",            cat:"🎉 Welcome & Start",      label:"/start — স্বাগত বার্তা",              hint:"{country_keys}, {used_count}, {remaining}" },
+  { key:"profile_reply",      cat:"📋 Profile Reply",        label:"Profile reply template",              hint:"{dev_line}, {tg_mention}, {country}, {field_lines}" },
+  { key:"unknown_country",    cat:"📋 Profile Reply",        label:"অজানা দেশের নাম লিখলে",              hint:"{keys}" },
+  { key:"profile_failed",     cat:"📋 Profile Reply",        label:"Profile তৈরিতে error হলে",            hint:"" },
+  { key:"ai_reply",           cat:"🤖 AI Name (/ainame)",    label:"AI name reply template",              hint:"{dev_line}, {ai_badge}, {tg_mention}, {country}, {field_lines}" },
+  { key:"ai_generating",      cat:"🤖 AI Name (/ainame)",    label:"AI নাম তৈরির loading message",        hint:"" },
+  { key:"ai_unavailable",     cat:"🤖 AI Name (/ainame)",    label:"AI key না থাকলে reply",               hint:"" },
+  { key:"ai_unknown_country", cat:"🤖 AI Name (/ainame)",    label:"AI — অজানা দেশ",                     hint:"{keys}" },
+  { key:"ai_profile_failed",  cat:"🤖 AI Name (/ainame)",    label:"AI profile তৈরিতে error",             hint:"" },
+  { key:"history_empty",      cat:"📜 History",              label:"/history — কোনো profile না থাকলে",    hint:"" },
+  { key:"history_copy_hint",  cat:"📜 History",              label:"/history — copy hint লাইন",           hint:"" },
+  { key:"panel_reply",        cat:"⚙️ Admin Commands",       label:"/panel — admin reply",                hint:"{developer_name}, {total_combinations}, {used_count}, {remaining}" },
+  { key:"panel_not_admin",    cat:"⚙️ Admin Commands",       label:"/panel — admin নন হলে reply",        hint:"" },
+  { key:"reset_success",      cat:"⚙️ Admin Commands",       label:"/reset — সফল হলে reply",              hint:"" },
+  { key:"reset_not_admin",    cat:"⚙️ Admin Commands",       label:"/reset — admin নন হলে reply",        hint:"" },
+  { key:"banned_reply",       cat:"🚫 Ban & Security",       label:"ব্যান করা user-কে reply",             hint:"" },
+  { key:"new_user_notify",    cat:"🔔 Admin Notifications",  label:"নতুন user join notification (admin)", hint:"{fullname}, {uname}, {user_id}, {total_users}" },
+  { key:"bot_crash_notify",   cat:"🔔 Admin Notifications",  label:"বট crash হলে admin notification",     hint:"{error}" },
+];
+
+let _botTextsCache = {};
+
+async function loadBotTexts() {
+  try {
+    const res = await fetch('/api/bot-texts');
+    if (!res.ok) { toast('Texts লোড ব্যর্থ', true); return; }
+    const data = await res.json();
+    _botTextsCache = data.texts || {};
+    renderBotTexts(_botTextsCache);
+  } catch(e) { toast('Network error', true); }
+}
+
+function renderBotTexts(texts) {
+  const container = document.getElementById('texts-container');
+  if (!container) return;
+  // Group by category
+  const cats = {};
+  BOT_TEXT_META.forEach(m => { if (!cats[m.cat]) cats[m.cat] = []; cats[m.cat].push(m); });
+  container.innerHTML = Object.entries(cats).map(([cat, items]) => `
+    <div class="section" style="margin-bottom:20px;padding:18px 22px;">
+      <h2 style="font-size:14px;font-weight:700;margin-bottom:14px;">${escHtml(cat)}</h2>
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        ${items.map(m => {
+          const rows = Math.min(Math.max((texts[m.key]||'').split('\n').length + 1, 3), 10);
+          return `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px 14px;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;gap:8px;flex-wrap:wrap;">
+              <div>
+                <div style="font-size:13px;font-weight:600;color:#e0d7ff;">${escHtml(m.label)}</div>
+                ${m.hint ? `<div style="font-size:11px;color:#666;margin-top:2px;">Placeholders: <span style="color:#a78bfa;">${escHtml(m.hint)}</span></div>` : ''}
+              </div>
+              <div style="display:flex;gap:6px;flex-shrink:0;">
+                <button class="btn" style="font-size:11px;padding:3px 10px;background:rgba(124,99,245,0.18);color:#c4b5fd;" onclick="saveSingleBotText('${m.key}')">💾 Save</button>
+                <button class="btn" style="font-size:11px;padding:3px 10px;background:rgba(255,255,255,0.05);color:#777;" onclick="resetSingleBotText('${m.key}')">↩</button>
+              </div>
+            </div>
+            <textarea id="txt-${m.key}" rows="${rows}"
+              style="width:100%;background:#0c0c18;border:1px solid rgba(255,255,255,0.08);border-radius:7px;color:#e0d7ff;font-size:12px;padding:8px 10px;resize:vertical;font-family:monospace;line-height:1.65;box-sizing:border-box;"
+            >${escHtml(texts[m.key] || '')}</textarea>
+            <div class="form-msg" id="txt-msg-${m.key}" style="margin-top:5px;font-size:12px;display:none;"></div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+}
+
+async function saveSingleBotText(key) {
+  const el = document.getElementById('txt-' + key);
+  if (!el) return;
+  const data = await apiPost('/api/bot-texts', { texts: { [key]: el.value } });
+  if (!data) return;
+  const msg = document.getElementById('txt-msg-' + key);
+  if (msg) {
+    msg.textContent = data.success ? '✅ সেভ হয়েছে!' : (data.error || 'Error');
+    msg.className = 'form-msg ' + (data.success ? 'success' : 'error');
+    msg.style.display = 'block';
+    setTimeout(() => { msg.style.display = 'none'; }, 3000);
+  }
+  if (data.success) { _botTextsCache[key] = el.value; toast('Saved ✓'); }
+}
+
+async function saveAllBotTexts() {
+  const texts = {};
+  BOT_TEXT_META.forEach(m => { const el = document.getElementById('txt-' + m.key); if (el) texts[m.key] = el.value; });
+  const data = await apiPost('/api/bot-texts', { texts });
+  if (!data) return;
+  showMsg('texts-global-msg', data.message || data.error, !data.success);
+  if (data.success) { toast('সব text সেভ হয়েছে ✓'); Object.assign(_botTextsCache, texts); }
+}
+
+async function resetSingleBotText(key) {
+  if (!confirm(`"${key}" ডিফল্টে ফিরিয়ে দেবেন?`)) return;
+  const data = await apiPost('/api/bot-texts/reset', { key });
+  if (!data) return;
+  if (data.success && data.default_value !== undefined) {
+    const el = document.getElementById('txt-' + key); if (el) el.value = data.default_value;
+    _botTextsCache[key] = data.default_value;
+    toast('✅ ডিফল্টে ফিরে গেছে!');
+  } else { toast(data.error || 'Error', true); }
+}
+
+async function resetAllBotTexts() {
+  if (!confirm('সব text ডিফল্টে ফিরিয়ে দেবেন?')) return;
+  const data = await apiPost('/api/bot-texts/reset', { key: 'all' });
+  if (!data) return;
+  if (data.success) { _botTextsCache = data.texts || {}; renderBotTexts(_botTextsCache); toast('✅ সব text ডিফল্টে ফিরে গেছে!'); }
+  else { toast(data.error || 'Error', true); }
+}
+
+// ── Init on page load ──
+(async function init() {
+  await loadCountrySelect();
+  toggleWeekday();
+  toggleFileAccess();
+})();
+</script>
+</body>
+</html>
