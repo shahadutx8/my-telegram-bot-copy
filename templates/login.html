@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Bot Dashboard — Login</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+      font-family: 'Segoe UI', sans-serif;
+    }
+    .card {
+      background: rgba(255,255,255,0.07);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 20px;
+      padding: 44px 40px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+      color: #fff;
+    }
+    .logo { font-size: 48px; margin-bottom: 10px; }
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    p { font-size: 14px; color: #aaa; margin-bottom: 28px; }
+    input {
+      width: 100%;
+      padding: 13px 16px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      font-size: 15px;
+      margin-bottom: 14px;
+      outline: none;
+      transition: border 0.2s;
+    }
+    input:focus { border-color: #7c63f5; }
+    input::placeholder { color: #888; }
+    button {
+      width: 100%;
+      padding: 13px;
+      background: linear-gradient(90deg, #7c63f5, #5b8dee);
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    button:hover { opacity: 0.88; }
+    .error {
+      background: rgba(255,80,80,0.15);
+      border: 1px solid rgba(255,80,80,0.3);
+      color: #ff6b6b;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 14px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">🤖</div>
+    <h1>Bot Dashboard</h1>
+    <p>Admin access only</p>
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+    <form method="POST" action="/login">
+      <input type="password" name="password" placeholder="Enter admin password" required autofocus />
+      <button type="submit">Login →</button>
+    </form>
+  </div>
+</body>
+</html>
