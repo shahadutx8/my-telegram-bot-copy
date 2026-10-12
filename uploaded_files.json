@@ -1,0 +1,35 @@
+[
+  {
+    "id": "fd49e681ebd032f5",
+    "title": "L444",
+    "command": "l444v0",
+    "caption": "",
+    "category": "General",
+    "version": "1.00",
+    "access_mode": "all",
+    "allowed_users": [],
+    "expires_at": "",
+    "filename": "channel-message-56",
+    "path": "",
+    "size": 0,
+    "created_at": "2026-09-21 10:43:39",
+    "downloads": 2,
+    "last_downloads": [
+      {
+        "user_id": 7170129517,
+        "username": "shahadutx8",
+        "first_name": "Md Shahadut",
+        "timestamp": "2026-09-21 11:09:36"
+      },
+      {
+        "user_id": 7170129517,
+        "username": "shahadutx8",
+        "first_name": "Md Shahadut",
+        "timestamp": "2026-09-21 10:45:55"
+      }
+    ],
+    "storage": "telegram_channel",
+    "source_chat_id": "-1003985693082",
+    "source_message_id": 56
+  }
+]
