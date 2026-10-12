@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: fake-profile-generator
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: SESSION_SECRET
+        sync: false
+      - key: DASHBOARD_PASSWORD
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
