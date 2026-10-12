@@ -1,0 +1,15 @@
+name: Keep Render Awake
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping homepage
+        run: curl -s -o /dev/null -w "homepage: %{http_code}\n" --max-time 60 https://shahadut.runs-at.dev/
+      - name: Ping public API
+        run: curl -s -o /dev/null -w "api: %{http_code}\n" --max-time 60 https://shahadut.runs-at.dev/api/public/meta
