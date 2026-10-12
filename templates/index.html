@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fake Profile Generator</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #0f0f1a; color: #e8e8f0;
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    padding: 32px 16px;
+  }
+  header { text-align: center; margin-bottom: 28px; }
+  header h1 { font-size: 30px; font-weight: 800; }
+  header h1 span { color: #8b7cf6; }
+  header p { color: #888; margin-top: 8px; font-size: 14px; }
+  .card {
+    width: 100%; max-width: 560px; background: #171726;
+    border: 1px solid rgba(255,255,255,0.07); border-radius: 16px;
+    padding: 24px; margin-bottom: 20px;
+  }
+  .card h2 { font-size: 15px; color: #aaa; margin-bottom: 14px; font-weight: 600; }
+  #countries { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill {
+    background: #22223a; border: 1px solid rgba(255,255,255,0.1); color: #ddd;
+    border-radius: 999px; padding: 8px 16px; font-size: 14px; cursor: pointer;
+    transition: all .15s;
+  }
+  .pill:hover { border-color: #8b7cf6; }
+  .pill.active { background: rgba(124,99,245,0.25); border-color: #8b7cf6; color: #fff; }
+  #generateBtn {
+    width: 100%; padding: 15px; font-size: 17px; font-weight: 700;
+    background: linear-gradient(135deg, #7c63f5, #5a3fd4); color: #fff;
+    border: none; border-radius: 12px; cursor: pointer; transition: transform .1s;
+  }
+  #generateBtn:hover:not(:disabled) { transform: translateY(-1px); }
+  #generateBtn:disabled { opacity: 0.55; cursor: wait; }
+  #result { display: none; }
+  #result.show { display: block; animation: fadeIn .3s; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; } }
+  .field-row {
+    display: flex; align-items: center; gap: 10px;
+    background: #101020; border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px; padding: 11px 13px; margin-bottom: 8px;
+  }
+  .field-row .emoji { font-size: 18px; }
+  .field-row .meta { flex: 1; min-width: 0; }
+  .field-row .label { font-size: 11px; color: #777; text-transform: uppercase; letter-spacing: .5px; }
+  .field-row .value { font-size: 15px; color: #fff; word-break: break-all; font-family: ui-monospace, monospace; }
+  .copy-btn {
+    background: #22223a; border: 1px solid rgba(255,255,255,0.1); color: #bbb;
+    border-radius: 8px; padding: 7px 11px; font-size: 12px; cursor: pointer; flex-shrink: 0;
+  }
+  .copy-btn:hover { border-color: #8b7cf6; color: #fff; }
+  .actions { display: flex; gap: 10px; margin-top: 14px; }
+  .actions button { flex: 1; padding: 12px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  #copyAllBtn { background: rgba(124,99,245,0.18); border: 1px solid #8b7cf6; color: #c4b5fd; }
+  #newBtn { background: #22223a; border: 1px solid rgba(255,255,255,0.12); color: #ddd; }
+  #error {
+    display: none; background: rgba(255,80,80,0.12); border: 1px solid rgba(255,80,80,0.4);
+    color: #ff9c9c; border-radius: 10px; padding: 12px; margin-bottom: 16px; font-size: 14px;
+    width: 100%; max-width: 560px;
+  }
+  #error.show { display: block; }
+  footer { margin-top: auto; padding-top: 30px; color: #555; font-size: 12px; }
+  footer a { color: #777; text-decoration: none; }
+  footer a:hover { color: #8b7cf6; }
+  .spinner {
+    display: inline-block; width: 16px; height: 16px; vertical-align: -3px;
+    border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff;
+    border-radius: 50%; animation: spin .7s linear infinite; margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <header>
+    <h1>🎭 Fake Profile <span>Generator</span></h1>
+    <p>Generate realistic test profiles for any country — instantly.</p>
+  </header>
+
+  <div id="error"></div>
+
+  <div class="card">
+    <h2>1 &nbsp;·&nbsp; Choose a country</h2>
+    <div id="countries"><span style="color:#666">Loading…</span></div>
+  </div>
+
+  <div class="card">
+    <h2>2 &nbsp;·&nbsp; Generate</h2>
+    <button id="generateBtn" disabled>Select a country first</button>
+  </div>
+
+  <div class="card" id="result">
+    <h2>✅ Your profile</h2>
+    <div id="fields"></div>
+    <div class="actions">
+      <button id="copyAllBtn">📋 Copy all</button>
+      <button id="newBtn">🎲 New profile</button>
+    </div>
+  </div>
+
+  <footer><a href="/login">Admin login</a></footer>
+
+<script>
+let selectedCountry = null;
+let lastProfile = null;
+let fieldMeta = [];
+
+async function loadMeta() {
+  try {
+    const r = await fetch('/api/public/meta');
+    const j = await r.json();
+    fieldMeta = j.fields || [];
+    const box = document.getElementById('countries');
+    box.innerHTML = '';
+    const keys = Object.keys(j.countries || {});
+    if (!keys.length) { box.innerHTML = '<span style="color:#666">No countries configured.</span>'; return; }
+    keys.forEach((k, i) => {
+      const b = document.createElement('button');
+      b.className = 'pill' + (i === 0 ? ' active' : '');
+      b.textContent = k.charAt(0).toUpperCase() + k.slice(1);
+      b.onclick = () => {
+        document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+        b.classList.add('active');
+        selectedCountry = k;
+        updateBtn();
+      };
+      box.appendChild(b);
+      if (i === 0) selectedCountry = k;
+    });
+    updateBtn();
+  } catch (e) { showError('Could not load countries. Is the server running?'); }
+}
+
+function updateBtn() {
+  const btn = document.getElementById('generateBtn');
+  btn.disabled = !selectedCountry;
+  btn.textContent = selectedCountry ? '⚡ Generate Profile' : 'Select a country first';
+}
+
+function showError(msg) {
+  const e = document.getElementById('error');
+  e.textContent = msg;
+  e.classList.add('show');
+  setTimeout(() => e.classList.remove('show'), 5000);
+}
+
+function copyText(t, btn) {
+  navigator.clipboard.writeText(t).then(() => {
+    const old = btn.textContent;
+    btn.textContent = '✓';
+    setTimeout(() => btn.textContent = old, 1200);
+  });
+}
+
+async function generate() {
+  const btn = document.getElementById('generateBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Generating…';
+  try {
+    const r = await fetch('/api/public/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ country: selectedCountry })
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'Generation failed');
+    lastProfile = j.profile;
+    renderProfile(j.profile);
+  } catch (e) { showError(e.message); }
+  btn.disabled = false;
+  btn.textContent = '⚡ Generate Profile';
+}
+
+function renderProfile(p) {
+  const box = document.getElementById('fields');
+  box.innerHTML = '';
+  fieldMeta.forEach(f => {
+    if (!(f.key in p)) return;
+    const row = document.createElement('div');
+    row.className = 'field-row';
+    row.innerHTML =
+      '<span class="emoji">' + f.emoji + '</span>' +
+      '<div class="meta"><div class="label">' + f.label + '</div>' +
+      '<div class="value"></div></div>';
+    row.querySelector('.value').textContent = p[f.key];
+    const cb = document.createElement('button');
+    cb.className = 'copy-btn';
+    cb.textContent = 'Copy';
+    cb.onclick = () => copyText(p[f.key], cb);
+    row.appendChild(cb);
+    box.appendChild(row);
+  });
+  document.getElementById('result').classList.add('show');
+  document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+document.getElementById('generateBtn').onclick = generate;
+document.getElementById('newBtn').onclick = generate;
+document.getElementById('copyAllBtn').onclick = function() {
+  if (!lastProfile) return;
+  const lines = fieldMeta
+    .filter(f => f.key in lastProfile)
+    .map(f => f.emoji + ' ' + f.label + ': ' + lastProfile[f.key]);
+  copyText(lines.join('\n'), this);
+};
+
+loadMeta();
+</script>
+</body>
+</html>
