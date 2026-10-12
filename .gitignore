@@ -1,0 +1,9 @@
+# Runtime state — never commit these
+config.json
+used_names.json
+name_log.json
+banned_users.json
+__pycache__/
+*.pyc
+*.pyo
+.env
