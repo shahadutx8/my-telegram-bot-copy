@@ -1,0 +1,2 @@
+- [Config ordering rule](config-ordering.md) — DEFAULT_* constants must be defined BEFORE load_config(); same pattern for DEFAULT_AI_PROMPT_BD/INTL and DEFAULT_BOT_TEXTS.
+- [Bot texts system](bot-texts-system.md) — all bot reply strings are in DEFAULT_BOT_TEXTS / CONFIG["bot_texts"]; use get_text(key, **kwargs) everywhere; load_config does deep merge for bot_texts.
