@@ -10,36 +10,46 @@
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     background: #0f0f1a; color: #e8e8f0;
     min-height: 100vh; display: flex; flex-direction: column; align-items: center;
-    padding: 32px 16px;
+    padding: 28px 16px;
   }
-  header { text-align: center; margin-bottom: 28px; }
-  header h1 { font-size: 30px; font-weight: 800; }
+  header { text-align: center; margin-bottom: 20px; }
+  header h1 { font-size: 28px; font-weight: 800; }
   header h1 span { color: #8b7cf6; }
   header p { color: #888; margin-top: 8px; font-size: 14px; }
+  .tabbar {
+    display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
+    margin-bottom: 22px; width: 100%; max-width: 640px;
+  }
+  .tab-btn {
+    background: #1a1a2e; border: 1px solid rgba(255,255,255,0.08); color: #bbb;
+    border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .tab-btn.active { background: rgba(124,99,245,0.25); border-color: #8b7cf6; color: #fff; }
+  .tab { display: none; width: 100%; max-width: 560px; }
+  .tab.active { display: block; animation: fadeIn .25s; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
   .card {
-    width: 100%; max-width: 560px; background: #171726;
+    width: 100%; background: #171726;
     border: 1px solid rgba(255,255,255,0.07); border-radius: 16px;
-    padding: 24px; margin-bottom: 20px;
+    padding: 22px; margin-bottom: 18px;
   }
   .card h2 { font-size: 15px; color: #aaa; margin-bottom: 14px; font-weight: 600; }
-  #countries { display: flex; flex-wrap: wrap; gap: 8px; }
+  #countries, #aiCountries { display: flex; flex-wrap: wrap; gap: 8px; }
   .pill {
     background: #22223a; border: 1px solid rgba(255,255,255,0.1); color: #ddd;
-    border-radius: 999px; padding: 8px 16px; font-size: 14px; cursor: pointer;
-    transition: all .15s;
+    border-radius: 999px; padding: 8px 16px; font-size: 14px; cursor: pointer; transition: all .15s;
   }
   .pill:hover { border-color: #8b7cf6; }
   .pill.active { background: rgba(124,99,245,0.25); border-color: #8b7cf6; color: #fff; }
-  #generateBtn {
+  .big-btn {
     width: 100%; padding: 15px; font-size: 17px; font-weight: 700;
     background: linear-gradient(135deg, #7c63f5, #5a3fd4); color: #fff;
-    border: none; border-radius: 12px; cursor: pointer; transition: transform .1s;
+    border: none; border-radius: 12px; cursor: pointer;
   }
-  #generateBtn:hover:not(:disabled) { transform: translateY(-1px); }
-  #generateBtn:disabled { opacity: 0.55; cursor: wait; }
+  .big-btn:hover:not(:disabled) { transform: translateY(-1px); }
+  .big-btn:disabled { opacity: 0.55; cursor: wait; }
   #result { display: none; }
   #result.show { display: block; animation: fadeIn .3s; }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; } }
   .field-row {
     display: flex; align-items: center; gap: 10px;
     background: #101020; border: 1px solid rgba(255,255,255,0.06);
@@ -64,6 +74,37 @@
     width: 100%; max-width: 560px;
   }
   #error.show { display: block; }
+  .ai-result {
+    text-align: center; padding: 26px 16px; background: #101020;
+    border: 1px solid rgba(139,124,246,0.3); border-radius: 12px;
+    font-size: 24px; font-weight: 700; color: #fff; margin-top: 6px;
+  }
+  .hist-item {
+    background: #101020; border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer;
+  }
+  .hist-item .t { font-size: 11px; color: #666; margin-bottom: 4px; }
+  .hist-item .n { font-size: 15px; font-weight: 600; }
+  .hist-item .c { font-size: 12px; color: #8b7cf6; text-transform: capitalize; }
+  .hist-detail { display: none; margin-top: 10px; }
+  .hist-detail.open { display: block; }
+  .hist-detail .field-row { padding: 8px 10px; }
+  .hist-detail .field-row .value { font-size: 13px; }
+  .file-row {
+    display: flex; align-items: center; gap: 12px;
+    background: #101020; border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px; padding: 13px 15px; margin-bottom: 8px;
+  }
+  .file-row .fi { font-size: 22px; }
+  .file-row .meta { flex: 1; min-width: 0; }
+  .file-row .ft { font-size: 14px; font-weight: 600; word-break: break-all; }
+  .file-row .fs { font-size: 12px; color: #777; margin-top: 2px; }
+  .dl-btn {
+    background: rgba(124,99,245,0.18); border: 1px solid #8b7cf6; color: #c4b5fd;
+    border-radius: 8px; padding: 9px 14px; font-size: 13px; font-weight: 600; cursor: pointer; flex-shrink: 0;
+  }
+  .help-q { font-weight: 700; margin: 14px 0 6px; color: #c4b5fd; font-size: 14px; }
+  .help-a { color: #aaa; font-size: 14px; line-height: 1.6; }
   footer { margin-top: auto; padding-top: 30px; color: #555; font-size: 12px; }
   footer a { color: #777; text-decoration: none; }
   footer a:hover { color: #8b7cf6; }
@@ -73,106 +114,192 @@
     border-radius: 50%; animation: spin .7s linear infinite; margin-right: 8px;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .empty { color: #666; text-align: center; padding: 24px; font-size: 14px; }
 </style>
 </head>
 <body>
   <header>
     <h1>🎭 Fake Profile <span>Generator</span></h1>
-    <p>Generate realistic test profiles for any country — instantly.</p>
+    <p>Generate realistic test profiles — free, no signup.</p>
   </header>
+
+  <div class="tabbar">
+    <button class="tab-btn active" onclick="switchTab('generate',this)">⚡ Generate</button>
+    <button class="tab-btn" onclick="switchTab('ai',this)">🤖 AI Name</button>
+    <button class="tab-btn" onclick="switchTab('history',this)">🕘 History</button>
+    <button class="tab-btn" onclick="switchTab('files',this)">📂 Files</button>
+    <button class="tab-btn" onclick="switchTab('help',this)">❓ Help</button>
+  </div>
 
   <div id="error"></div>
 
-  <div class="card">
-    <h2>1 &nbsp;·&nbsp; Choose a country</h2>
-    <div id="countries"><span style="color:#666">Loading…</span></div>
+  <!-- ══ GENERATE ══ -->
+  <div class="tab active" id="tab-generate">
+    <div class="card">
+      <h2>Choose a country</h2>
+      <div id="countries"><span style="color:#666">Loading…</span></div>
+    </div>
+    <div class="card">
+      <button class="big-btn" id="generateBtn" disabled>Select a country first</button>
+    </div>
+    <div class="card" id="result">
+      <h2>✅ Your profile</h2>
+      <div id="fields"></div>
+      <div class="actions">
+        <button id="copyAllBtn">📋 Copy all</button>
+        <button id="newBtn">🎲 New profile</button>
+      </div>
+    </div>
   </div>
 
-  <div class="card">
-    <h2>2 &nbsp;·&nbsp; Generate</h2>
-    <button id="generateBtn" disabled>Select a country first</button>
+  <!-- ══ AI NAME ══ -->
+  <div class="tab" id="tab-ai">
+    <div class="card">
+      <h2>Choose a country</h2>
+      <div id="aiCountries"><span style="color:#666">Loading…</span></div>
+    </div>
+    <div class="card">
+      <button class="big-btn" id="aiBtn">🤖 Generate AI Name</button>
+      <div id="aiResult" style="display:none"></div>
+    </div>
   </div>
 
-  <div class="card" id="result">
-    <h2>✅ Your profile</h2>
-    <div id="fields"></div>
-    <div class="actions">
-      <button id="copyAllBtn">📋 Copy all</button>
-      <button id="newBtn">🎲 New profile</button>
+  <!-- ══ HISTORY ══ -->
+  <div class="tab" id="tab-history">
+    <div class="card">
+      <h2>Your recent profiles <span style="font-weight:400;color:#666">(this browser)</span></h2>
+      <div id="histList"><div class="empty">No history yet — generate a profile first.</div></div>
+    </div>
+  </div>
+
+  <!-- ══ FILES ══ -->
+  <div class="tab" id="tab-files">
+    <div class="card">
+      <h2>Downloadable files</h2>
+      <div id="fileList"><div class="empty">Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- ══ HELP ══ -->
+  <div class="tab" id="tab-help">
+    <div class="card">
+      <h2>How it works</h2>
+      <div class="help-q">What is this?</div>
+      <div class="help-a">A free tool that generates realistic-looking fake profiles (name, phone, email, username…) for testing and development. Nothing here is a real person.</div>
+      <div class="help-q">Are the profiles unique?</div>
+      <div class="help-a">Yes — every generated name, phone number and username is tracked so you never get the same one twice.</div>
+      <div class="help-q">What is AI Name?</div>
+      <div class="help-a">Instead of picking from a list, an AI model invents a natural-sounding name guided by real name patterns for the selected country.</div>
+      <div class="help-q">Is my history saved?</div>
+      <div class="help-a">Your last 10 generated profiles are kept in this browser only (via a random visitor ID). Clear your browser data to erase it.</div>
+      <div class="help-q">Is there a limit?</div>
+      <div class="help-a">Yes — 20 requests per minute per visitor, to keep the service fair for everyone.</div>
     </div>
   </div>
 
   <footer><a href="/login">Admin login</a></footer>
 
 <script>
-let selectedCountry = null;
-let lastProfile = null;
-let fieldMeta = [];
+let selectedCountry = null, aiCountry = null;
+let lastProfile = null, fieldMeta = [];
+let visitor = localStorage.getItem('fpg_visitor');
+if (!visitor) {
+  visitor = 'w-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  localStorage.setItem('fpg_visitor', visitor);
+}
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'history') loadHistory();
+  if (name === 'files') loadFiles();
+}
+
+function showError(msg) {
+  const e = document.getElementById('error');
+  e.textContent = msg; e.classList.add('show');
+  setTimeout(() => e.classList.remove('show'), 5000);
+}
+
+function copyText(t, btn) {
+  navigator.clipboard.writeText(t).then(() => {
+    const old = btn.textContent; btn.textContent = '✓';
+    setTimeout(() => btn.textContent = old, 1200);
+  });
+}
+
+function pillBox(elId, onPick) {
+  return {
+    render(keys) {
+      const box = document.getElementById(elId);
+      box.innerHTML = '';
+      keys.forEach((k, i) => {
+        const b = document.createElement('button');
+        b.className = 'pill' + (i === 0 ? ' active' : '');
+        b.textContent = k.charAt(0).toUpperCase() + k.slice(1);
+        b.onclick = () => {
+          box.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+          b.classList.add('active');
+          onPick(k);
+        };
+        box.appendChild(b);
+      });
+      if (keys.length) onPick(keys[0]);
+    }
+  };
+}
 
 async function loadMeta() {
   try {
     const r = await fetch('/api/public/meta');
     const j = await r.json();
     fieldMeta = j.fields || [];
-    const box = document.getElementById('countries');
-    box.innerHTML = '';
     const keys = Object.keys(j.countries || {});
-    if (!keys.length) { box.innerHTML = '<span style="color:#666">No countries configured.</span>'; return; }
-    keys.forEach((k, i) => {
-      const b = document.createElement('button');
-      b.className = 'pill' + (i === 0 ? ' active' : '');
-      b.textContent = k.charAt(0).toUpperCase() + k.slice(1);
-      b.onclick = () => {
-        document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
-        b.classList.add('active');
-        selectedCountry = k;
-        updateBtn();
-      };
-      box.appendChild(b);
-      if (i === 0) selectedCountry = k;
-    });
-    updateBtn();
-  } catch (e) { showError('Could not load countries. Is the server running?'); }
+    const gen = pillBox('countries', k => { selectedCountry = k; updateGenBtn(); });
+    const ai = pillBox('aiCountries', k => { aiCountry = k; });
+    gen.render(keys); ai.render(keys);
+  } catch (e) { showError('Could not load countries.'); }
 }
 
-function updateBtn() {
+function updateGenBtn() {
   const btn = document.getElementById('generateBtn');
   btn.disabled = !selectedCountry;
   btn.textContent = selectedCountry ? '⚡ Generate Profile' : 'Select a country first';
 }
 
-function showError(msg) {
-  const e = document.getElementById('error');
-  e.textContent = msg;
-  e.classList.add('show');
-  setTimeout(() => e.classList.remove('show'), 5000);
-}
-
-function copyText(t, btn) {
-  navigator.clipboard.writeText(t).then(() => {
-    const old = btn.textContent;
-    btn.textContent = '✓';
-    setTimeout(() => btn.textContent = old, 1200);
-  });
-}
-
+/* ── Generate ── */
 async function generate() {
   const btn = document.getElementById('generateBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>Generating…';
   try {
     const r = await fetch('/api/public/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ country: selectedCountry })
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ country: selectedCountry, visitor })
     });
     const j = await r.json();
     if (!j.success) throw new Error(j.error || 'Generation failed');
     lastProfile = j.profile;
     renderProfile(j.profile);
   } catch (e) { showError(e.message); }
-  btn.disabled = false;
-  btn.textContent = '⚡ Generate Profile';
+  btn.disabled = false; btn.textContent = '⚡ Generate Profile';
+}
+
+function fieldRow(emoji, label, value) {
+  const row = document.createElement('div');
+  row.className = 'field-row';
+  const em = document.createElement('span'); em.className = 'emoji'; em.textContent = emoji;
+  const meta = document.createElement('div'); meta.className = 'meta';
+  const lb = document.createElement('div'); lb.className = 'label'; lb.textContent = label;
+  const vl = document.createElement('div'); vl.className = 'value'; vl.textContent = value;
+  meta.appendChild(lb); meta.appendChild(vl);
+  const cb = document.createElement('button');
+  cb.className = 'copy-btn'; cb.textContent = 'Copy';
+  cb.onclick = () => copyText(value, cb);
+  row.appendChild(em); row.appendChild(meta); row.appendChild(cb);
+  return row;
 }
 
 function renderProfile(p) {
@@ -180,30 +307,100 @@ function renderProfile(p) {
   box.innerHTML = '';
   fieldMeta.forEach(f => {
     if (!(f.key in p)) return;
-    const row = document.createElement('div');
-    row.className = 'field-row';
-    row.innerHTML =
-      '<span class="emoji">' + f.emoji + '</span>' +
-      '<div class="meta"><div class="label">' + f.label + '</div>' +
-      '<div class="value"></div></div>';
-    row.querySelector('.value').textContent = p[f.key];
-    const cb = document.createElement('button');
-    cb.className = 'copy-btn';
-    cb.textContent = 'Copy';
-    cb.onclick = () => copyText(p[f.key], cb);
-    row.appendChild(cb);
-    box.appendChild(row);
+    box.appendChild(fieldRow(f.emoji, f.label, p[f.key]));
   });
   document.getElementById('result').classList.add('show');
-  document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/* ── AI Name ── */
+async function genAiName() {
+  const btn = document.getElementById('aiBtn');
+  const out = document.getElementById('aiResult');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Thinking…';
+  out.style.display = 'none';
+  try {
+    const r = await fetch('/api/public/ai-name', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ country: aiCountry })
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'AI failed');
+    out.style.display = 'block';
+    out.className = 'ai-result';
+    out.textContent = '✨ ' + j.name;
+  } catch (e) { showError(e.message); }
+  btn.disabled = false; btn.textContent = '🤖 Generate AI Name';
+}
+
+/* ── History ── */
+async function loadHistory() {
+  const box = document.getElementById('histList');
+  try {
+    const r = await fetch('/api/public/history?visitor=' + encodeURIComponent(visitor));
+    const j = await r.json();
+    const h = j.history || [];
+    if (!h.length) { box.innerHTML = '<div class="empty">No history yet — generate a profile first.</div>'; return; }
+    box.innerHTML = '';
+    h.forEach(entry => {
+      const d = document.createElement('div');
+      d.className = 'hist-item';
+      const name = entry.full_name || entry.nickname || '(profile)';
+      const c = entry.country || '';
+      d.innerHTML = '<div class="t">' + (entry.timestamp || '') + '</div>' +
+        '<div class="n"></div><div class="c">' + c + '</div>';
+      d.querySelector('.n').textContent = name;
+      const det = document.createElement('div');
+      det.className = 'hist-detail';
+      fieldMeta.forEach(f => {
+        if (entry[f.key]) det.appendChild(fieldRow(f.emoji, f.label, entry[f.key]));
+      });
+      d.appendChild(det);
+      d.onclick = (e) => { if (e.target.classList.contains('copy-btn')) return; det.classList.toggle('open'); };
+      box.appendChild(d);
+    });
+  } catch (e) { box.innerHTML = '<div class="empty">Could not load history.</div>'; }
+}
+
+/* ── Files ── */
+function fmtSize(b) {
+  b = +b || 0;
+  if (b > 1048576) return (b / 1048576).toFixed(1) + ' MB';
+  if (b > 1024) return (b / 1024).toFixed(1) + ' KB';
+  return b + ' B';
+}
+async function loadFiles() {
+  const box = document.getElementById('fileList');
+  try {
+    const r = await fetch('/api/public/files');
+    const j = await r.json();
+    const files = j.files || [];
+    if (!files.length) { box.innerHTML = '<div class="empty">No files available right now.</div>'; return; }
+    box.innerHTML = '';
+    files.forEach(f => {
+      const row = document.createElement('div');
+      row.className = 'file-row';
+      const ic = document.createElement('span'); ic.className = 'fi'; ic.textContent = '📄';
+      const meta = document.createElement('div'); meta.className = 'meta';
+      const t = document.createElement('div'); t.className = 'ft'; t.textContent = f.title;
+      const s = document.createElement('div'); s.className = 'fs';
+      s.textContent = (f.category ? f.category + ' · ' : '') + fmtSize(f.size) + ' · ⬇ ' + f.downloads;
+      meta.appendChild(t); meta.appendChild(s);
+      const dl = document.createElement('button');
+      dl.className = 'dl-btn'; dl.textContent = 'Download';
+      dl.onclick = () => { window.location = '/api/public/files/download/' + encodeURIComponent(f.id); };
+      row.appendChild(ic); row.appendChild(meta); row.appendChild(dl);
+      box.appendChild(row);
+    });
+  } catch (e) { box.innerHTML = '<div class="empty">Could not load files.</div>'; }
 }
 
 document.getElementById('generateBtn').onclick = generate;
 document.getElementById('newBtn').onclick = generate;
+document.getElementById('aiBtn').onclick = genAiName;
 document.getElementById('copyAllBtn').onclick = function() {
   if (!lastProfile) return;
-  const lines = fieldMeta
-    .filter(f => f.key in lastProfile)
+  const lines = fieldMeta.filter(f => f.key in lastProfile)
     .map(f => f.emoji + ' ' + f.label + ': ' + lastProfile[f.key]);
   copyText(lines.join('\n'), this);
 };
