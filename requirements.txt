@@ -1,0 +1,8 @@
+pyTelegramBotAPI
+Faker
+Flask
+psycopg2-binary
+werkzeug
+google-generativeai
+google-genai
+sift-stack-py
