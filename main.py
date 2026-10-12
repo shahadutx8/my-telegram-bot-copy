@@ -1287,6 +1287,10 @@ def _public_ip():
         return fwd.split(',')[0].strip()
     return (request.remote_addr or 'unknown').strip()
 
+@app.route('/google3de2443376b1929d.html')
+def google_site_verification():
+    return "google-site-verification: google3de2443376b1929d.html", 200, {"Content-Type": "text/html"}
+
 @app.route('/api/public/meta')
 def api_public_meta():
     countries = get_country_details()
