@@ -501,20 +501,22 @@ def generate_ai_name(country_key: str = "bangladesh") -> str | None:
             last_names  = "",
         )
 
-    try:
-        client   = genai.Client(api_key=_GEMINI_KEY)
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=prompt,
-        )
-        name = response.text.strip().strip("\"'").strip()
-        # Sanity check: must be 2–5 words, no special chars beyond periods/spaces
-        if name and 2 <= len(name.split()) <= 5:
-            return name
-        return None
-    except Exception as e:
-        print(f"[generate_ai_name] error: {e}")
-        return None
+    # Model fallback chain — Google retires old Flash models regularly
+    for _model in ("gemini-2.5-flash", "gemini-3.5-flash"):
+        try:
+            client   = genai.Client(api_key=_GEMINI_KEY)
+            response = client.models.generate_content(
+                model=_model,
+                contents=prompt,
+            )
+            name = response.text.strip().strip("\"'").strip()
+            # Sanity check: must be 2–5 words, no special chars beyond periods/spaces
+            if name and 2 <= len(name.split()) <= 5:
+                return name
+        except Exception as e:
+            print(f"[generate_ai_name] model={_model} error: {e}")
+            continue
+    return None
 
 # --------------------------------------------
 # Flask App Setup
