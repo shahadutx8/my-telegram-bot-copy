@@ -501,21 +501,23 @@ def generate_ai_name(country_key: str = "bangladesh") -> str | None:
             last_names  = "",
         )
 
-    # Model fallback chain — Google retires old Flash models regularly
+    # Model fallback chain — Google retires old Flash models regularly.
+    # Each model is retried with backoff: the free Gemini tier is flaky/rate-limited.
     for _model in ("gemini-2.5-flash", "gemini-3.5-flash"):
-        try:
-            client   = genai.Client(api_key=_GEMINI_KEY)
-            response = client.models.generate_content(
-                model=_model,
-                contents=prompt,
-            )
-            name = response.text.strip().strip("\"'").strip()
-            # Sanity check: must be 2–5 words, no special chars beyond periods/spaces
-            if name and 2 <= len(name.split()) <= 5:
-                return name
-        except Exception as e:
-            print(f"[generate_ai_name] model={_model} error: {e}")
-            continue
+        for _attempt in range(3):
+            try:
+                client   = genai.Client(api_key=_GEMINI_KEY)
+                response = client.models.generate_content(
+                    model=_model,
+                    contents=prompt,
+                )
+                name = response.text.strip().strip("\"'").strip()
+                # Sanity check: must be 2–5 words, no special chars beyond periods/spaces
+                if name and 2 <= len(name.split()) <= 5:
+                    return name
+            except Exception as e:
+                print(f"[generate_ai_name] model={_model} attempt={_attempt+1} error: {e}")
+            _time_module.sleep(2 * (_attempt + 1))
     return None
 
 # --------------------------------------------
@@ -2536,7 +2538,7 @@ def health():
 # --------------------------------------------
 def run_web_server():
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, use_reloader=False)
+    app.run(host='0.0.0.0', port=port, use_reloader=False, threaded=True)
 
 if __name__ == '__main__':
     # Start background scheduler
