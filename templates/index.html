@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Shahadut | Fake Profile Generator</title>
 <meta name="description" content="Shahadut's free fake profile generator — generate realistic test profiles for any country instantly. No signup needed.">
-<meta name="keywords" content="Shahadut, শাহাদাত, shahadut, fake profile generator, profile generator, test profile">
+<meta name="keywords" content="Shahadut, shahadut, fake profile generator, profile generator, test profile">
 <meta name="author" content="Shahadut">
 <meta property="og:title" content="Shahadut | Fake Profile Generator">
 <meta property="og:description" content="Generate realistic test profiles for any country — free, no signup.">
@@ -127,7 +127,7 @@
 <body>
   <header>
     <h1>🎭 Fake Profile <span>Generator</span></h1>
-    <p>by <strong style="color:#c4b5fd">Shahadut (শাহাদাত)</strong> · Generate realistic test profiles — free, no signup.</p>
+    <p>by <strong style="color:#c4b5fd">Shahadut</strong> · Generate realistic test profiles — free, no signup.</p>
   </header>
 
   <div class="tabbar">
@@ -204,7 +204,7 @@
     </div>
   </div>
 
-  <footer>© Shahadut (শাহাদাত) · <a href="/login">Admin login</a></footer>
+  <footer>© Shahadut · <a href="/login">Admin login</a></footer>
 
 <script>
 let selectedCountry = null, aiCountry = null;
@@ -267,7 +267,24 @@ async function loadMeta() {
     const gen = pillBox('countries', k => { selectedCountry = k; updateGenBtn(); });
     const ai = pillBox('aiCountries', k => { aiCountry = k; });
     gen.render(keys); ai.render(keys);
-  } catch (e) { showError('Could not load countries.'); }
+  } catch (e) { showError('Could not load countries.'); metaRetry(); }
+}
+
+function metaRetry() {
+  ['countries', 'aiCountries'].forEach(id => {
+    const box = document.getElementById(id);
+    if (!box || box.querySelector('.pill')) return;
+    box.innerHTML = '';
+    const b = document.createElement('button');
+    b.className = 'pill';
+    b.textContent = '\u21bb Retry';
+    b.onclick = () => {
+      document.getElementById('countries').innerHTML = '<span style="color:#666">Loading\u2026</span>';
+      document.getElementById('aiCountries').innerHTML = '<span style="color:#666">Loading\u2026</span>';
+      loadMeta();
+    };
+    box.appendChild(b);
+  });
 }
 
 function updateGenBtn() {
@@ -409,8 +426,7 @@ document.getElementById('copyAllBtn').onclick = function() {
   if (!lastProfile) return;
   const lines = fieldMeta.filter(f => f.key in lastProfile)
     .map(f => f.emoji + ' ' + f.label + ': ' + lastProfile[f.key]);
-  copyText(lines.join('
-'), this);
+  copyText(lines.join('\n'), this);
 };
 
 loadMeta();
