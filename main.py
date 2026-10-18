@@ -1409,6 +1409,7 @@ def api_public_files():
                 "filename": item.get("filename", ""),
                 "caption": item.get("caption", ""),
                 "category": item.get("category", "General"),
+                "version": item.get("version", ""),
                 "size": item.get("size", 0),
                 "downloads": int(item.get("downloads", 0) or 0),
             })
@@ -1445,7 +1446,10 @@ def api_public_file_download(file_id):
         return jsonify(success=False, error='File unavailable.'), 404
     record_file_download(item.get("id", ""),
                          SimpleNamespace(id="web", username="", first_name="web"))
-    return send_file(fh, as_attachment=True, download_name=fname)
+    mimetype = "application/vnd.android.package-archive" \
+        if fname.lower().endswith(".apk") else None
+    return send_file(fh, as_attachment=True, download_name=fname,
+                     mimetype=mimetype)
 
 # --------------------------------------------
 # Public Website — Temporary Mail (via mail.tm)

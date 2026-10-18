@@ -449,11 +449,13 @@ async function loadFiles() {
     files.forEach(f => {
       const row = document.createElement('div');
       row.className = 'file-row';
-      const ic = document.createElement('span'); ic.className = 'fi'; ic.textContent = '📄';
+      const ic = document.createElement('span'); ic.className = 'fi';
+      ic.textContent = (f.filename || '').toLowerCase().endsWith('.apk') ? '\uD83D\uDCF1' : '\uD83D\uDCC4';
       const meta = document.createElement('div'); meta.className = 'meta';
       const t = document.createElement('div'); t.className = 'ft'; t.textContent = f.title;
       const s = document.createElement('div'); s.className = 'fs';
-      s.textContent = (f.category ? f.category + ' · ' : '') + fmtSize(f.size) + ' · ⬇ ' + f.downloads;
+      s.textContent = (f.category ? f.category + ' · ' : '') +
+        (f.version ? 'v' + f.version + ' · ' : '') + fmtSize(f.size) + ' · ⬇ ' + f.downloads;
       meta.appendChild(t); meta.appendChild(s);
       const dl = document.createElement('button');
       dl.className = 'dl-btn'; dl.textContent = 'Download';
