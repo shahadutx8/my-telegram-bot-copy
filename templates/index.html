@@ -135,7 +135,7 @@
     <button class="tab-btn" onclick="switchTab('ai',this)">🤖 AI Name</button>
     <button class="tab-btn" onclick="switchTab('history',this)">🕘 History</button>
     <button class="tab-btn" onclick="switchTab('files',this)">📂 Files</button>
-    <button class="tab-btn" onclick="switchTab('tempmail',this)">📧 Temp Mail</button>
+    <button class="tab-btn" onclick="switchTab('tempmail',this)">📧 Email Verification</button>
     <button class="tab-btn" onclick="switchTab('help',this)">❓ Help</button>
   </div>
 
@@ -191,8 +191,8 @@
   <!-- ══ TEMP MAIL ══ -->
   <div class="tab" id="tab-tempmail">
     <div class="card">
-      <h2>📧 Temporary email</h2>
-      <p style="color:#888;font-size:13px;margin:0 0 10px">The address is made from your generated username — mails (including OTP codes) arrive in the inbox below.</p>
+      <h2>📧 Email verification</h2>
+      <p style="color:#888;font-size:13px;margin:0 0 10px">The address is made from your generated username — verification codes (OTP) sent to it appear in the inbox below.</p>
       <div style="display:flex;gap:8px">
         <input id="tmName" placeholder="username" style="flex:1;min-width:0" autocomplete="off">
         <button class="big-btn" id="tmCreateBtn" style="width:auto;padding:10px 16px">Create</button>
@@ -200,7 +200,7 @@
       <div id="tmAddrBox" style="display:none;margin-top:10px">
         <div class="field-row">
           <span class="emoji">✉️</span>
-          <div class="meta"><div class="label">Your temp address</div><div class="value" id="tmAddr"></div></div>
+          <div class="meta"><div class="label">Your verification address</div><div class="value" id="tmAddr"></div></div>
           <button class="copy-btn" id="tmCopyBtn">Copy</button>
         </div>
       </div>
@@ -229,8 +229,8 @@
       <div class="help-a">Instead of picking from a list, an AI model invents a natural-sounding name guided by real name patterns for the selected country.</div>
       <div class="help-q">Is my history saved?</div>
       <div class="help-a">Your last 10 generated profiles are kept in this browser only (via a random visitor ID). Clear your browser data to erase it.</div>
-      <div class="help-q">What is Temp Mail?</div>
-      <div class="help-a">A disposable email address made from your generated username (e.g. tanvir_88@maxxspace.com). Any mail sent to it — including OTP codes — shows up in the Temp Mail inbox. Addresses are temporary and managed by a third-party temp-mail service.</div>
+      <div class="help-q">What is Email Verification?</div>
+      <div class="help-a">A disposable email address made from your generated username (e.g. tanvir_88@maxxspace.com). It is created automatically when you generate a profile. Verification codes sent to it show up in the Email Verification inbox.</div>
       <div class="help-q">Is there a limit?</div>
       <div class="help-a">Yes — 20 requests per minute per visitor, to keep the service fair for everyone.</div>
     </div>
@@ -340,6 +340,7 @@ async function generate() {
     if (!j.success) throw new Error(j.error || 'Generation failed');
     lastProfile = j.profile;
     renderProfile(j.profile);
+    tmAutoCreate(j.profile.username);
   } catch (e) { showError(e.message); }
   btn.disabled = false; btn.textContent = '⚡ Generate Profile';
 }
@@ -452,10 +453,27 @@ async function loadFiles() {
   } catch (e) { box.innerHTML = '<div class="empty">Could not load files.</div>'; }
 }
 
-/* ── Temp Mail ── */
+/* ── Email Verification ── */
 let tmToken = localStorage.getItem('fpg_tm_token') || '';
 let tmAddress = localStorage.getItem('fpg_tm_addr') || '';
 let tmTimer = null;
+
+/* Auto-create the verification address from the generated username */
+async function tmAutoCreate(username) {
+  if (!username) return;
+  document.getElementById('tmName').value = username;
+  try {
+    const r = await fetch('/api/public/tempmail/create', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: username })
+    });
+    const j = await r.json();
+    if (!j.success) return;
+    tmToken = j.token; tmAddress = j.address;
+    localStorage.setItem('fpg_tm_token', tmToken);
+    localStorage.setItem('fpg_tm_addr', tmAddress);
+  } catch (e) { /* user can tap Create manually */ }
+}
 
 function tmInit() {
   const nameInput = document.getElementById('tmName');

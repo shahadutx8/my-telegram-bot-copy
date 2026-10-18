@@ -1477,6 +1477,13 @@ def _mailtm_request(method, path, data=None, token=None, timeout=15):
     except Exception:
         return 0, {}
 
+def _hydra_list(data):
+    if isinstance(data, dict):
+        return data.get("hydra:member", []) or []
+    if isinstance(data, list):
+        return data
+    return []
+
 def _mailtm_domains():
     now = _time_module.time()
     if now - _mailtm_domains_cache["at"] < 3600 and _mailtm_domains_cache["domains"]:
@@ -1484,9 +1491,12 @@ def _mailtm_domains():
     status, data = _mailtm_request("GET", "/domains")
     domains = []
     if status == 200:
-        for d in data.get("hydra:member", []) or []:
-            if d.get("isActive") and d.get("domain"):
-                domains.append(d["domain"])
+        for d in _hydra_list(data):
+            if isinstance(d, dict):
+                if d.get("isActive") and d.get("domain"):
+                    domains.append(d["domain"])
+            elif isinstance(d, str) and "." in d:
+                domains.append(d)
     if domains:
         _mailtm_domains_cache.update(at=now, domains=domains)
         return domains
@@ -1541,7 +1551,9 @@ def api_public_tempmail_messages():
     if status != 200:
         return jsonify(success=False, error='Inbox unavailable.'), 502
     msgs = []
-    for m in data.get("hydra:member", []) or []:
+    for m in _hydra_list(data):
+        if not isinstance(m, dict):
+            continue
         frm = m.get("from") or {}
         msgs.append({
             "id": m.get("id", ""),
@@ -1562,7 +1574,7 @@ def api_public_tempmail_message(msg_id):
     if not msg_id:
         return jsonify(success=False, error='Bad message id'), 400
     status, m = _mailtm_request("GET", "/messages/" + msg_id, token=token)
-    if status != 200:
+    if status != 200 or not isinstance(m, dict):
         return jsonify(success=False, error='Message unavailable.'), 502
     frm = m.get("from") or {}
     return jsonify(success=True, message={
