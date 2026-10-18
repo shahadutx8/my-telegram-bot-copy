@@ -340,6 +340,10 @@ async function generate() {
     if (!j.success) throw new Error(j.error || 'Generation failed');
     lastProfile = j.profile;
     renderProfile(j.profile);
+    tmToken = ''; tmAddress = '';
+    localStorage.removeItem('fpg_tm_token');
+    localStorage.removeItem('fpg_tm_addr');
+    removeVerificationRow();
     tmAutoCreate(j.profile.username);
   } catch (e) { showError(e.message); }
   btn.disabled = false; btn.textContent = '⚡ Generate Profile';
@@ -472,7 +476,29 @@ async function tmAutoCreate(username) {
     tmToken = j.token; tmAddress = j.address;
     localStorage.setItem('fpg_tm_token', tmToken);
     localStorage.setItem('fpg_tm_addr', tmAddress);
+    renderVerificationRow();
   } catch (e) { /* user can tap Create manually */ }
+}
+
+/* Show the verification address as a profile field row (like USERNAME) */
+function renderVerificationRow() {
+  const box = document.getElementById('fields');
+  if (!box || !document.getElementById('result').classList.contains('show')) return;
+  let row = document.getElementById('verifRow');
+  if (!tmAddress) { if (row) row.remove(); return; }
+  if (!row) {
+    row = fieldRow('\uD83D\uDCE7', 'Email Verification', tmAddress);
+    row.id = 'verifRow';
+    box.appendChild(row);
+  } else {
+    row.querySelector('.value').textContent = tmAddress;
+    const cb = row.querySelector('.copy-btn');
+    cb.onclick = () => copyText(tmAddress, cb);
+  }
+}
+function removeVerificationRow() {
+  const row = document.getElementById('verifRow');
+  if (row) row.remove();
 }
 
 function tmInit() {
@@ -505,6 +531,7 @@ function tmShowInbox() {
   document.getElementById('tmAddr').textContent = tmAddress;
   document.getElementById('tmInboxCard').style.display = 'block';
   document.getElementById('tmMsgCard').style.display = 'none';
+  renderVerificationRow();
   tmLoad();
   if (tmTimer) clearInterval(tmTimer);
   tmTimer = setInterval(tmLoad, 10000);
@@ -566,6 +593,7 @@ document.getElementById('copyAllBtn').onclick = function() {
   if (!lastProfile) return;
   const lines = fieldMeta.filter(f => f.key in lastProfile)
     .map(f => f.emoji + ' ' + f.label + ': ' + lastProfile[f.key]);
+  if (tmAddress) lines.push('\uD83D\uDCE7 Email Verification: ' + tmAddress);
   copyText(lines.join('\n'), this);
 };
 
