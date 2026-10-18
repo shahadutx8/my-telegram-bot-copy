@@ -1448,6 +1448,133 @@ def api_public_file_download(file_id):
     return send_file(fh, as_attachment=True, download_name=fname)
 
 # --------------------------------------------
+# Public Website — Temporary Mail (via mail.tm)
+# --------------------------------------------
+import urllib.request as _urlreq
+import urllib.error as _urlerr
+
+MAILTM_API = "https://api.mail.tm"
+_mailtm_domains_cache = {"at": 0.0, "domains": []}
+
+def _mailtm_request(method, path, data=None, token=None, timeout=15):
+    req = _urlreq.Request(MAILTM_API + path, data=(
+        json.dumps(data).encode("utf-8") if data is not None else None),
+        method=method)
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Accept", "application/json")
+    if token:
+        req.add_header("Authorization", "Bearer " + token)
+    try:
+        with _urlreq.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8")
+            return resp.status, (json.loads(raw) if raw else {})
+    except _urlerr.HTTPError as e:
+        try:
+            raw = e.read().decode("utf-8")
+            return e.code, (json.loads(raw) if raw else {})
+        except Exception:
+            return e.code, {}
+    except Exception:
+        return 0, {}
+
+def _mailtm_domains():
+    now = _time_module.time()
+    if now - _mailtm_domains_cache["at"] < 3600 and _mailtm_domains_cache["domains"]:
+        return _mailtm_domains_cache["domains"]
+    status, data = _mailtm_request("GET", "/domains")
+    domains = []
+    if status == 200:
+        for d in data.get("hydra:member", []) or []:
+            if d.get("isActive") and d.get("domain"):
+                domains.append(d["domain"])
+    if domains:
+        _mailtm_domains_cache.update(at=now, domains=domains)
+        return domains
+    return _mailtm_domains_cache["domains"]
+
+def _tempmail_sanitize(name):
+    name = (name or "").strip().lower()
+    name = re.sub(r"[^a-z0-9._-]", "", name)
+    return name[:32].strip("._-")
+
+@app.route('/api/public/tempmail/create', methods=['POST'])
+def api_public_tempmail_create():
+    ip = _public_ip()
+    if not _public_rate_ok(ip):
+        return jsonify(success=False,
+                       error='Too many requests — wait a minute.'), 429
+    data = request.get_json(force=True, silent=True) or {}
+    base = _tempmail_sanitize(data.get("name", ""))
+    if not base:
+        base = "user" + secrets_module.token_hex(3)
+    domains = _mailtm_domains()
+    if not domains:
+        return jsonify(success=False,
+                       error='Temp mail service is unavailable right now.'), 502
+    domain = domains[0]
+    password = secrets_module.token_urlsafe(18)
+    address = None
+    for attempt in range(5):
+        local = base if attempt == 0 else "%s%d" % (base, random.randint(10, 9999))
+        cand = "%s@%s" % (local, domain)
+        status, _ = _mailtm_request("POST", "/accounts",
+                                   {"address": cand, "password": password})
+        if status in (200, 201):
+            address = cand
+            break
+    if not address:
+        return jsonify(success=False,
+                       error='Could not create a temp address. Try again.'), 502
+    status, tok = _mailtm_request("POST", "/token",
+                                 {"address": address, "password": password})
+    if status != 200 or not tok.get("token"):
+        return jsonify(success=False,
+                       error='Could not open the inbox. Try again.'), 502
+    return jsonify(success=True, address=address, token=tok["token"])
+
+@app.route('/api/public/tempmail/messages')
+def api_public_tempmail_messages():
+    token = (request.args.get("token") or "")[:2000]
+    if not token:
+        return jsonify(success=False, error='Missing token'), 400
+    status, data = _mailtm_request("GET", "/messages", token=token)
+    if status != 200:
+        return jsonify(success=False, error='Inbox unavailable.'), 502
+    msgs = []
+    for m in data.get("hydra:member", []) or []:
+        frm = m.get("from") or {}
+        msgs.append({
+            "id": m.get("id", ""),
+            "from": frm.get("address", "") or frm.get("name", ""),
+            "subject": m.get("subject", "") or "(no subject)",
+            "intro": m.get("intro", "") or "",
+            "date": m.get("createdAt", "") or "",
+            "seen": bool(m.get("seen")),
+        })
+    return jsonify(success=True, messages=msgs)
+
+@app.route('/api/public/tempmail/message/<msg_id>')
+def api_public_tempmail_message(msg_id):
+    token = (request.args.get("token") or "")[:2000]
+    if not token:
+        return jsonify(success=False, error='Missing token'), 400
+    msg_id = re.sub(r"[^a-zA-Z0-9-]", "", msg_id)[:64]
+    if not msg_id:
+        return jsonify(success=False, error='Bad message id'), 400
+    status, m = _mailtm_request("GET", "/messages/" + msg_id, token=token)
+    if status != 200:
+        return jsonify(success=False, error='Message unavailable.'), 502
+    frm = m.get("from") or {}
+    return jsonify(success=True, message={
+        "id": m.get("id", ""),
+        "from": frm.get("address", "") or frm.get("name", ""),
+        "subject": m.get("subject", "") or "(no subject)",
+        "date": m.get("createdAt", "") or "",
+        "text": m.get("text", "") or "",
+        "html": m.get("html", "") or "",
+    })
+
+# --------------------------------------------
 # Flask Routes — Dashboard
 # --------------------------------------------
 @app.route('/dashboard')

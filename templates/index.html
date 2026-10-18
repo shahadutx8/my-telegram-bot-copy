@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Shahadut | Fake Profile Generator</title>
 <meta name="description" content="Shahadut's free fake profile generator — generate realistic test profiles for any country instantly. No signup needed.">
-<meta name="keywords" content="Shahadut, shahadut, fake profile generator, profile generator, test profile">
+<meta name="keywords" content="শাহাদাত, Shahadut, shahadut, fake profile generator, profile generator, test profile">
 <meta name="author" content="Shahadut">
 <meta property="og:title" content="Shahadut | Fake Profile Generator">
 <meta property="og:description" content="Generate realistic test profiles for any country — free, no signup.">
@@ -127,7 +127,7 @@
 <body>
   <header>
     <h1>🎭 Fake Profile <span>Generator</span></h1>
-    <p>by <strong style="color:#c4b5fd">Shahadut</strong> · Generate realistic test profiles — free, no signup.</p>
+    <p>by <strong style="color:#c4b5fd">Shahadut (শাহাদাত)</strong> · Generate realistic test profiles — free, no signup.</p>
   </header>
 
   <div class="tabbar">
@@ -135,6 +135,7 @@
     <button class="tab-btn" onclick="switchTab('ai',this)">🤖 AI Name</button>
     <button class="tab-btn" onclick="switchTab('history',this)">🕘 History</button>
     <button class="tab-btn" onclick="switchTab('files',this)">📂 Files</button>
+    <button class="tab-btn" onclick="switchTab('tempmail',this)">📧 Temp Mail</button>
     <button class="tab-btn" onclick="switchTab('help',this)">❓ Help</button>
   </div>
 
@@ -187,6 +188,35 @@
     </div>
   </div>
 
+  <!-- ══ TEMP MAIL ══ -->
+  <div class="tab" id="tab-tempmail">
+    <div class="card">
+      <h2>📧 Temporary email</h2>
+      <p style="color:#888;font-size:13px;margin:0 0 10px">The address is made from your generated username — mails (including OTP codes) arrive in the inbox below.</p>
+      <div style="display:flex;gap:8px">
+        <input id="tmName" placeholder="username" style="flex:1;min-width:0" autocomplete="off">
+        <button class="big-btn" id="tmCreateBtn" style="width:auto;padding:10px 16px">Create</button>
+      </div>
+      <div id="tmAddrBox" style="display:none;margin-top:10px">
+        <div class="field-row">
+          <span class="emoji">✉️</span>
+          <div class="meta"><div class="label">Your temp address</div><div class="value" id="tmAddr"></div></div>
+          <button class="copy-btn" id="tmCopyBtn">Copy</button>
+        </div>
+      </div>
+    </div>
+    <div class="card" id="tmInboxCard" style="display:none">
+      <h2>Inbox <button class="copy-btn" id="tmRefreshBtn" title="Refresh">↻</button></h2>
+      <div id="tmList"><div class="empty">Waiting for mails…</div></div>
+    </div>
+    <div class="card" id="tmMsgCard" style="display:none">
+      <button class="copy-btn" id="tmBackBtn">← Back</button>
+      <h2 id="tmMsgSubject" style="margin:10px 0 4px"></h2>
+      <div id="tmMsgMeta" style="color:#888;font-size:12px;margin-bottom:10px"></div>
+      <div id="tmMsgBody" style="white-space:pre-wrap;word-break:break-word;font-size:14px"></div>
+    </div>
+  </div>
+
   <!-- ══ HELP ══ -->
   <div class="tab" id="tab-help">
     <div class="card">
@@ -199,12 +229,14 @@
       <div class="help-a">Instead of picking from a list, an AI model invents a natural-sounding name guided by real name patterns for the selected country.</div>
       <div class="help-q">Is my history saved?</div>
       <div class="help-a">Your last 10 generated profiles are kept in this browser only (via a random visitor ID). Clear your browser data to erase it.</div>
+      <div class="help-q">What is Temp Mail?</div>
+      <div class="help-a">A disposable email address made from your generated username (e.g. tanvir_88@maxxspace.com). Any mail sent to it — including OTP codes — shows up in the Temp Mail inbox. Addresses are temporary and managed by a third-party temp-mail service.</div>
       <div class="help-q">Is there a limit?</div>
       <div class="help-a">Yes — 20 requests per minute per visitor, to keep the service fair for everyone.</div>
     </div>
   </div>
 
-  <footer>© Shahadut · <a href="/login">Admin login</a></footer>
+  <footer>© Shahadut (শাহাদাত) · <a href="/login">Admin login</a></footer>
 
 <script>
 let selectedCountry = null, aiCountry = null;
@@ -222,6 +254,7 @@ function switchTab(name, btn) {
   btn.classList.add('active');
   if (name === 'history') loadHistory();
   if (name === 'files') loadFiles();
+  if (name === 'tempmail') tmInit();
 }
 
 function showError(msg) {
@@ -419,6 +452,95 @@ async function loadFiles() {
   } catch (e) { box.innerHTML = '<div class="empty">Could not load files.</div>'; }
 }
 
+/* ── Temp Mail ── */
+let tmToken = localStorage.getItem('fpg_tm_token') || '';
+let tmAddress = localStorage.getItem('fpg_tm_addr') || '';
+let tmTimer = null;
+
+function tmInit() {
+  const nameInput = document.getElementById('tmName');
+  if (!nameInput.value && lastProfile && lastProfile.username) nameInput.value = lastProfile.username;
+  if (tmToken && tmAddress) tmShowInbox();
+}
+
+async function tmCreate() {
+  const btn = document.getElementById('tmCreateBtn');
+  const name = document.getElementById('tmName').value.trim();
+  btn.disabled = true; btn.textContent = 'Creating…';
+  try {
+    const r = await fetch('/api/public/tempmail/create', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'Creation failed');
+    tmToken = j.token; tmAddress = j.address;
+    localStorage.setItem('fpg_tm_token', tmToken);
+    localStorage.setItem('fpg_tm_addr', tmAddress);
+    tmShowInbox();
+  } catch (e) { showError(e.message); }
+  btn.disabled = false; btn.textContent = 'Create';
+}
+
+function tmShowInbox() {
+  document.getElementById('tmAddrBox').style.display = 'block';
+  document.getElementById('tmAddr').textContent = tmAddress;
+  document.getElementById('tmInboxCard').style.display = 'block';
+  document.getElementById('tmMsgCard').style.display = 'none';
+  tmLoad();
+  if (tmTimer) clearInterval(tmTimer);
+  tmTimer = setInterval(tmLoad, 10000);
+}
+
+async function tmLoad() {
+  const box = document.getElementById('tmList');
+  try {
+    const r = await fetch('/api/public/tempmail/messages?token=' + encodeURIComponent(tmToken));
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'Inbox failed');
+    const msgs = j.messages || [];
+    if (!msgs.length) { box.innerHTML = '<div class="empty">No mails yet — waiting…</div>'; return; }
+    box.innerHTML = '';
+    msgs.forEach(m => {
+      const row = document.createElement('div');
+      row.className = 'file-row';
+      const meta = document.createElement('div'); meta.className = 'meta';
+      const t = document.createElement('div'); t.className = 'ft'; t.textContent = m.subject;
+      const s = document.createElement('div'); s.className = 'fs';
+      s.textContent = (m.seen ? '' : '● ') + m.from;
+      if (!m.seen) s.style.color = '#c4b5fd';
+      meta.appendChild(t); meta.appendChild(s);
+      row.appendChild(meta);
+      row.style.cursor = 'pointer';
+      row.onclick = () => tmOpen(m.id);
+      box.appendChild(row);
+    });
+  } catch (e) { box.innerHTML = '<div class="empty">Could not load inbox.</div>'; }
+}
+
+async function tmOpen(id) {
+  try {
+    const r = await fetch('/api/public/tempmail/message/' + encodeURIComponent(id) +
+      '?token=' + encodeURIComponent(tmToken));
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'Message failed');
+    const m = j.message;
+    document.getElementById('tmInboxCard').style.display = 'none';
+    const card = document.getElementById('tmMsgCard');
+    card.style.display = 'block';
+    document.getElementById('tmMsgSubject').textContent = m.subject;
+    document.getElementById('tmMsgMeta').textContent = 'From: ' + m.from;
+    const body = document.getElementById('tmMsgBody');
+    if (m.text) { body.textContent = m.text; }
+    else if (m.html) {
+      const d = document.createElement('div');
+      d.innerHTML = m.html;
+      body.textContent = d.textContent || '';
+    } else { body.textContent = '(empty message)'; }
+    tmLoad();
+  } catch (e) { showError(e.message); }
+}
+
 document.getElementById('generateBtn').onclick = generate;
 document.getElementById('newBtn').onclick = generate;
 document.getElementById('aiBtn').onclick = genAiName;
@@ -428,6 +550,14 @@ document.getElementById('copyAllBtn').onclick = function() {
     .map(f => f.emoji + ' ' + f.label + ': ' + lastProfile[f.key]);
   copyText(lines.join('\n'), this);
 };
+
+document.getElementById('tmCreateBtn').onclick = tmCreate;
+document.getElementById('tmRefreshBtn').onclick = tmLoad;
+document.getElementById('tmBackBtn').onclick = () => {
+  document.getElementById('tmMsgCard').style.display = 'none';
+  document.getElementById('tmInboxCard').style.display = 'block';
+};
+document.getElementById('tmCopyBtn').onclick = function() { copyText(tmAddress, this); };
 
 loadMeta();
 </script>
