@@ -213,7 +213,14 @@
       <button class="copy-btn" id="tmBackBtn">← Back</button>
       <h2 id="tmMsgSubject" style="margin:10px 0 4px"></h2>
       <div id="tmMsgMeta" style="color:#888;font-size:12px;margin-bottom:10px"></div>
-      <div id="tmMsgBody" style="white-space:pre-wrap;word-break:break-word;font-size:14px"></div>
+      <div id="tmCodeBox" style="display:none;margin-bottom:12px;padding:12px;border:1px solid #6d5ef0;border-radius:10px;background:#1a1730">
+        <div class="label" style="color:#888;font-size:11px">VERIFICATION CODE</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+          <div id="tmCode" style="font-size:30px;font-weight:700;letter-spacing:6px;color:#c4b5fd"></div>
+          <button class="copy-btn" id="tmCodeCopy">Copy</button>
+        </div>
+      </div>
+      <div id="tmMsgBody" style="white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.6"></div>
     </div>
   </div>
 
@@ -563,6 +570,34 @@ async function tmLoad() {
   } catch (e) { box.innerHTML = '<div class="empty">Could not load inbox.</div>'; }
 }
 
+/* Render email HTML safely: strip scripts, styles, forms and event handlers */
+function tmSanitizeHtml(html) {
+  const d = document.createElement('div');
+  d.innerHTML = html;
+  d.querySelectorAll('script,style,iframe,object,embed,form,input,button,link,meta,title').forEach(e => e.remove());
+  d.querySelectorAll('*').forEach(e => {
+    Array.from(e.attributes).forEach(a => {
+      const n = a.name.toLowerCase();
+      if (n === 'style' || n === 'srcdoc' || n.startsWith('on')) e.removeAttribute(a.name);
+      else if ((n === 'href' || n === 'src') && /^\s*javascript:/i.test(a.value)) e.removeAttribute(a.name);
+    });
+  });
+  return d.innerHTML;
+}
+function tmPlainText(html) {
+  const d = document.createElement('div');
+  d.innerHTML = html;
+  return d.textContent || '';
+}
+/* Pull the OTP / verification code out of the message text */
+function tmExtractCode(text) {
+  if (!text) return '';
+  const near = text.match(/(?:code|otp|verification|verify)[^\d]{0,60}(\d{4,8})/i);
+  if (near) return near[1];
+  const any = text.match(/\b(\d{4,8})\b/);
+  return any ? any[1] : '';
+}
+
 async function tmOpen(id) {
   try {
     const r = await fetch('/api/public/tempmail/message/' + encodeURIComponent(id) +
@@ -575,13 +610,20 @@ async function tmOpen(id) {
     card.style.display = 'block';
     document.getElementById('tmMsgSubject').textContent = m.subject;
     document.getElementById('tmMsgMeta').textContent = 'From: ' + m.from;
+    const plain = m.text || tmPlainText(m.html || '');
+    const code = tmExtractCode(plain);
+    const codeBox = document.getElementById('tmCodeBox');
+    if (code) {
+      codeBox.style.display = 'block';
+      document.getElementById('tmCode').textContent = code;
+      document.getElementById('tmCodeCopy').onclick = function() { copyText(code, this); };
+    } else {
+      codeBox.style.display = 'none';
+    }
     const body = document.getElementById('tmMsgBody');
-    if (m.text) { body.textContent = m.text; }
-    else if (m.html) {
-      const d = document.createElement('div');
-      d.innerHTML = m.html;
-      body.textContent = d.textContent || '';
-    } else { body.textContent = '(empty message)'; }
+    if (m.html) body.innerHTML = tmSanitizeHtml(m.html);
+    else if (m.text) body.textContent = m.text;
+    else body.textContent = '(empty message)';
     tmLoad();
   } catch (e) { showError(e.message); }
 }

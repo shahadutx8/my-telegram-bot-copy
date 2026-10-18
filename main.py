@@ -1577,13 +1577,16 @@ def api_public_tempmail_message(msg_id):
     if status != 200 or not isinstance(m, dict):
         return jsonify(success=False, error='Message unavailable.'), 502
     frm = m.get("from") or {}
+    html = m.get("html", "") or ""
+    if isinstance(html, list):
+        html = "\n".join(x for x in html if isinstance(x, str))
     return jsonify(success=True, message={
         "id": m.get("id", ""),
         "from": frm.get("address", "") or frm.get("name", ""),
         "subject": m.get("subject", "") or "(no subject)",
         "date": m.get("createdAt", "") or "",
         "text": m.get("text", "") or "",
-        "html": m.get("html", "") or "",
+        "html": html,
     })
 
 # --------------------------------------------
