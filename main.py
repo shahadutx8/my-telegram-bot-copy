@@ -1452,12 +1452,22 @@ def api_public_file_download(file_id):
                      mimetype=mimetype)
 
 # --------------------------------------------
-# Public Website — Temporary Mail (via mail.tm)
+# Public Website — Temporary Mail (multi-provider)
 # --------------------------------------------
+# Why several providers: mail.tm allows only ~5 account creations per
+# hour per IP, and Render's outbound IP is shared, so mail.tm alone
+# hits its limit fast. We rotate between 3 free providers (each with
+# its own rotating domains) so hundreds of users can create a fresh
+# address at the same time. EVERY create call makes a NEW mailbox —
+# nothing is reused. Tokens are prefixed with the provider
+# ("mtm:" / "tml:" / "gm:"); old bare mail.tm JWTs still work.
 import urllib.request as _urlreq
 import urllib.error as _urlerr
+import urllib.parse as _urlparse
 
 MAILTM_API = "https://api.mail.tm"
+TML_API = "https://api.tempmail.lol/v2"
+GM_API = "https://api.guerrillamail.com/ajax.php"
 _mailtm_domains_cache = {"at": 0.0, "domains": []}
 
 def _mailtm_request(method, path, data=None, token=None, timeout=15):
@@ -1468,6 +1478,26 @@ def _mailtm_request(method, path, data=None, token=None, timeout=15):
     req.add_header("Accept", "application/json")
     if token:
         req.add_header("Authorization", "Bearer " + token)
+    try:
+        with _urlreq.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8")
+            return resp.status, (json.loads(raw) if raw else {})
+    except _urlerr.HTTPError as e:
+        try:
+            raw = e.read().decode("utf-8")
+            return e.code, (json.loads(raw) if raw else {})
+        except Exception:
+            return e.code, {}
+    except Exception:
+        return 0, {}
+
+def _http_json(method, url, data=None, timeout=12):
+    """Generic JSON request to a temp-mail provider. Returns (status, dict)."""
+    body = json.dumps(data).encode("utf-8") if data is not None else None
+    req = _urlreq.Request(url, data=body, method=method)
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Accept", "application/json")
+    req.add_header("User-Agent", "Mozilla/5.0")
     try:
         with _urlreq.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
@@ -1511,6 +1541,75 @@ def _tempmail_sanitize(name):
     name = re.sub(r"[^a-z0-9._-]", "", name)
     return name[:32].strip("._-")
 
+def _tm_parse_token(raw):
+    """Returns (provider, inner_token). Bare tokens are legacy mail.tm JWTs."""
+    raw = raw or ""
+    if raw.startswith("mtm:"):
+        return "mailtm", raw[4:]
+    if raw.startswith("tml:"):
+        return "tempmail", raw[4:]
+    if raw.startswith("gm:"):
+        return "guerrilla", raw[3:]
+    return "mailtm", raw
+
+def _mailtm_create(base):
+    """Returns (address, token) or (None, 'rate_limited'|'failed')."""
+    domains = _mailtm_domains()
+    if not domains:
+        return None, "failed"
+    password = secrets_module.token_urlsafe(18)
+    for local in (base, "%s%d" % (base, random.randint(10, 9999))):
+        cand = "%s@%s" % (local, domains[0])
+        status, _ = _mailtm_request("POST", "/accounts",
+                                    {"address": cand, "password": password})
+        if status in (200, 201):
+            break
+        if status == 429:
+            return None, "rate_limited"
+        if status in (422, 400):
+            continue  # address taken — try the suffixed name once
+        if status == 0:
+            return None, "failed"
+    else:
+        return None, "failed"
+    status, tok = _mailtm_request("POST", "/token",
+                                  {"address": cand, "password": password})
+    if status == 429:
+        return None, "rate_limited"
+    if status != 200 or not isinstance(tok, dict) or not tok.get("token"):
+        return None, "failed"
+    return cand, "mtm:" + tok["token"]
+
+def _tempmail_create(base):
+    """tempmail.lol v2: prefix is kept, a random suffix + rotating domain
+    is added by the provider. Returns (address, token) or (None, reason)."""
+    prefix = re.sub(r"[^a-z0-9]", "", base) or ("user" + secrets_module.token_hex(3))
+    status, data = _http_json("POST", TML_API + "/inbox/create",
+                              {"prefix": prefix[:24]})
+    if status == 429:
+        return None, "rate_limited"
+    if status in (200, 201) and isinstance(data, dict) \
+            and data.get("address") and data.get("token"):
+        return data["address"], "tml:" + str(data["token"])
+    return None, "failed"
+
+def _guerrilla_create(base):
+    """GuerrillaMail: set_email_user with the username. No account
+    creation limit like mail.tm. Returns (address, token) or (None, reason)."""
+    for local in (base, "%s%d" % (base, random.randint(10, 9999))):
+        q = _urlparse.urlencode({"f": "set_email_user", "email_user": local,
+                                 "lang": "en"})
+        status, data = _http_json("GET", GM_API + "?" + q)
+        if status == 429:
+            return None, "rate_limited"
+        if status == 200 and isinstance(data, dict) \
+                and data.get("email_addr") and data.get("sid_token"):
+            addr = data["email_addr"]
+            if addr.lower().startswith(local.lower() + "@"):
+                return addr, "gm:" + str(data["sid_token"])
+            continue  # name was taken / rewritten — try suffixed name once
+    return None, "failed"
+
 @app.route('/api/public/tempmail/create', methods=['POST'])
 def api_public_tempmail_create():
     ip = _public_ip()
@@ -1521,37 +1620,95 @@ def api_public_tempmail_create():
     base = _tempmail_sanitize(data.get("name", ""))
     if not base:
         base = "user" + secrets_module.token_hex(3)
-    domains = _mailtm_domains()
-    if not domains:
+    # Fresh mailbox every time (never reused). Try providers in a random
+    # order so load spreads across them; a 429 on one provider just moves
+    # on to the next instead of hammering the same limit.
+    makers = [("mailtm", _mailtm_create),
+              ("tempmail", _tempmail_create),
+              ("guerrilla", _guerrilla_create)]
+    random.shuffle(makers)
+    saw_rate_limited = False
+    for _name, make in makers:
+        try:
+            address, token = make(base)
+        except Exception:
+            address, token = None, "failed"
+        if address and token:
+            return jsonify(success=True, address=address, token=token,
+                           provider=_name)
+        if token == "rate_limited":
+            saw_rate_limited = True
+    if saw_rate_limited:
         return jsonify(success=False,
-                       error='Temp mail service is unavailable right now.'), 502
-    domain = domains[0]
-    password = secrets_module.token_urlsafe(18)
-    address = None
-    for attempt in range(5):
-        local = base if attempt == 0 else "%s%d" % (base, random.randint(10, 9999))
-        cand = "%s@%s" % (local, domain)
-        status, _ = _mailtm_request("POST", "/accounts",
-                                   {"address": cand, "password": password})
-        if status in (200, 201):
-            address = cand
-            break
-    if not address:
-        return jsonify(success=False,
-                       error='Could not create a temp address. Try again.'), 502
-    status, tok = _mailtm_request("POST", "/token",
-                                 {"address": address, "password": password})
-    if status != 200 or not tok.get("token"):
-        return jsonify(success=False,
-                       error='Could not open the inbox. Try again.'), 502
-    return jsonify(success=True, address=address, token=tok["token"])
+                       error='All email providers are busy right now — try again in a few minutes.'), 502
+    return jsonify(success=False,
+                   error='Could not create a temp address. Try again.'), 502
+
+def _tml_from_field(m, *keys):
+    for k in keys:
+        v = m.get(k)
+        if isinstance(v, dict):
+            v = v.get("address") or v.get("name") or ""
+        if v:
+            return v
+    return ""
 
 @app.route('/api/public/tempmail/messages')
 def api_public_tempmail_messages():
     token = (request.args.get("token") or "")[:2000]
     if not token:
         return jsonify(success=False, error='Missing token'), 400
-    status, data = _mailtm_request("GET", "/messages", token=token)
+    provider, inner = _tm_parse_token(token)
+    if provider == "tempmail":
+        status, data = _http_json(
+            "GET", TML_API + "/inbox?token=" + _urlparse.quote(inner))
+        if status != 200 or not isinstance(data, dict):
+            return jsonify(success=False, error='Inbox unavailable.'), 502
+        if data.get("expired"):
+            return jsonify(success=False,
+                           error='Inbox expired — create a new address.'), 502
+        msgs = []
+        for i, m in enumerate(data.get("emails") or []):
+            if not isinstance(m, dict):
+                continue
+            body = m.get("body") or m.get("html") or ""
+            msgs.append({
+                "id": str(m.get("id") or m.get("uid") or i),
+                "from": _tml_from_field(m, "from", "sender"),
+                "subject": m.get("subject") or "(no subject)",
+                "intro": (m.get("excerpt") or body or "")[:120],
+                "date": m.get("date") or m.get("createdAt") or "",
+                "seen": bool(m.get("seen")),
+            })
+        return jsonify(success=True, messages=msgs)
+    if provider == "guerrilla":
+        q = _urlparse.urlencode({"f": "check_email", "seq": "0",
+                                 "sid_token": inner, "lang": "en"})
+        status, data = _http_json("GET", GM_API + "?" + q)
+        if status != 200 or not isinstance(data, dict) \
+                or not isinstance(data.get("list"), list):
+            return jsonify(success=False, error='Inbox unavailable.'), 502
+        msgs = []
+        for m in data["list"]:
+            if not isinstance(m, dict):
+                continue
+            # Skip GuerrillaMail's own welcome mail — it is not an OTP.
+            if m.get("mail_subject") == "Welcome to Guerrilla Mail":
+                continue
+            msgs.append({
+                "id": str(m.get("mail_id", "")),
+                "from": m.get("mail_from", "") or "",
+                "subject": m.get("mail_subject", "") or "(no subject)",
+                "intro": (m.get("mail_excerpt", "") or "")[:120],
+                "date": m.get("mail_date", "") or "",
+                "seen": bool(m.get("mail_read")),
+            })
+        return jsonify(success=True, messages=msgs)
+    # mail.tm (incl. legacy bare JWTs)
+    status, data = _mailtm_request("GET", "/messages", token=inner)
+    if status in (401, 403):
+        return jsonify(success=False,
+                       error='Inbox session expired — create a new address.'), 502
     if status != 200:
         return jsonify(success=False, error='Inbox unavailable.'), 502
     msgs = []
@@ -1574,10 +1731,50 @@ def api_public_tempmail_message(msg_id):
     token = (request.args.get("token") or "")[:2000]
     if not token:
         return jsonify(success=False, error='Missing token'), 400
-    msg_id = re.sub(r"[^a-zA-Z0-9-]", "", msg_id)[:64]
+    msg_id = re.sub(r"[^a-zA-Z0-9_-]", "", msg_id)[:128]
     if not msg_id:
         return jsonify(success=False, error='Bad message id'), 400
-    status, m = _mailtm_request("GET", "/messages/" + msg_id, token=token)
+    provider, inner = _tm_parse_token(token)
+    if provider == "tempmail":
+        status, data = _http_json(
+            "GET", TML_API + "/inbox?token=" + _urlparse.quote(inner))
+        if status != 200 or not isinstance(data, dict):
+            return jsonify(success=False, error='Message unavailable.'), 502
+        for m in data.get("emails") or []:
+            if not isinstance(m, dict):
+                continue
+            if str(m.get("id") or m.get("uid") or "") != msg_id:
+                continue
+            html = m.get("html") or ""
+            if isinstance(html, list):
+                html = "\n".join(x for x in html if isinstance(x, str))
+            return jsonify(success=True, message={
+                "id": msg_id,
+                "from": _tml_from_field(m, "from", "sender"),
+                "subject": m.get("subject") or "(no subject)",
+                "date": m.get("date") or m.get("createdAt") or "",
+                "text": m.get("body") or m.get("text") or "",
+                "html": html,
+            })
+        return jsonify(success=False, error='Message unavailable.'), 502
+    if provider == "guerrilla":
+        q = _urlparse.urlencode({"f": "fetch_email", "email_id": msg_id,
+                                 "sid_token": inner, "lang": "en"})
+        status, m = _http_json("GET", GM_API + "?" + q)
+        if status != 200 or not isinstance(m, dict) or not m.get("mail_id"):
+            return jsonify(success=False, error='Message unavailable.'), 502
+        html = m.get("mail_body", "") or ""
+        if isinstance(html, list):
+            html = "\n".join(x for x in html if isinstance(x, str))
+        return jsonify(success=True, message={
+            "id": msg_id,
+            "from": m.get("mail_from", "") or "",
+            "subject": m.get("mail_subject", "") or "(no subject)",
+            "date": m.get("mail_date", "") or "",
+            "text": "",
+            "html": html,
+        })
+    status, m = _mailtm_request("GET", "/messages/" + msg_id, token=inner)
     if status != 200 or not isinstance(m, dict):
         return jsonify(success=False, error='Message unavailable.'), 502
     frm = m.get("from") or {}
