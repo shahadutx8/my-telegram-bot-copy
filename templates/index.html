@@ -569,7 +569,16 @@ async function tmLoad() {
       row.onclick = () => tmOpen(m.id);
       box.appendChild(row);
     });
-  } catch (e) { box.innerHTML = '<div class="empty">Could not load inbox.</div>'; }
+  } catch (e) {
+    // Show the real reason from the server (e.g. "Inbox expired — create
+    // a new address.") instead of a generic message, so the user knows
+    // whether to wait or tap Create for a fresh address.
+    box.innerHTML = '';
+    const d = document.createElement('div');
+    d.className = 'empty';
+    d.textContent = e.message || 'Could not load inbox.';
+    box.appendChild(d);
+  }
 }
 
 /* Render email HTML safely: strip scripts, styles, forms and event handlers */

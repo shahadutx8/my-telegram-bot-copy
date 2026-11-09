@@ -1620,13 +1620,16 @@ def api_public_tempmail_create():
     base = _tempmail_sanitize(data.get("name", ""))
     if not base:
         base = "user" + secrets_module.token_hex(3)
-    # Fresh mailbox every time (never reused). Try providers in a random
-    # order so load spreads across them; a 429 on one provider just moves
-    # on to the next instead of hammering the same limit.
+    # Fresh mailbox every time (never reused). Long-lived inboxes first:
+    # mail.tm and GuerrillaMail keep mail ~1 hour, but tempmail.lol
+    # expires after ~10 min without a check (1h hard limit), so it is
+    # only a fallback — otherwise OTPs die while the user waits.
+    # The two long-lived providers are shuffled so load spreads
+    # across them; a 429 on one just moves on to the next.
     makers = [("mailtm", _mailtm_create),
-              ("tempmail", _tempmail_create),
               ("guerrilla", _guerrilla_create)]
     random.shuffle(makers)
+    makers.append(("tempmail", _tempmail_create))
     saw_rate_limited = False
     for _name, make in makers:
         try:
@@ -1662,6 +1665,12 @@ def api_public_tempmail_messages():
     if provider == "tempmail":
         status, data = _http_json(
             "GET", TML_API + "/inbox?token=" + _urlparse.quote(inner))
+        if status != 200:
+            # tempmail.lol sometimes 403s a single poll (bot filter) —
+            # one quick retry before giving up.
+            _time_module.sleep(1)
+            status, data = _http_json(
+                "GET", TML_API + "/inbox?token=" + _urlparse.quote(inner))
         if status != 200 or not isinstance(data, dict):
             return jsonify(success=False, error='Inbox unavailable.'), 502
         if data.get("expired"):
