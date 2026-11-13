@@ -390,8 +390,26 @@ def register_handlers(b, ctx=None):
             "🎲 Auto (any)", callback_data="tm:provider:auto"))
         return keyboard
 
-    def _tm_inbox_keyboard():
+    def _tm_inbox_keyboard(address=None):
         keyboard = telebot.types.InlineKeyboardMarkup(row_width=1)
+        if address:
+            keyboard.add(telebot.types.InlineKeyboardButton(
+                "📋 Copy address",
+                copy_text=telebot.types.CopyTextButton(text=address[:256])))
+        keyboard.add(telebot.types.InlineKeyboardButton(
+            "📬 Check inbox", callback_data="tm:inbox"))
+        return keyboard
+
+    def _tm_msg_keyboard(address, code=None):
+        keyboard = telebot.types.InlineKeyboardMarkup(row_width=1)
+        if code:
+            keyboard.add(telebot.types.InlineKeyboardButton(
+                "📋 Copy code",
+                copy_text=telebot.types.CopyTextButton(text=code[:256])))
+        if address:
+            keyboard.add(telebot.types.InlineKeyboardButton(
+                "📋 Copy address",
+                copy_text=telebot.types.CopyTextButton(text=address[:256])))
         keyboard.add(telebot.types.InlineKeyboardButton(
             "📬 Check inbox", callback_data="tm:inbox"))
         return keyboard
@@ -484,7 +502,7 @@ def register_handlers(b, ctx=None):
                 f"Provider: {prov}\n"
                 f"এই address-এ পাঠানো verification code এখানেই দেখতে পাবেন।",
                 parse_mode="Markdown",
-                reply_markup=_tm_inbox_keyboard(),
+                reply_markup=_tm_inbox_keyboard(address),
             )
             return
         if data == "tm:inbox":
@@ -504,7 +522,7 @@ def register_handlers(b, ctx=None):
                     chat_id,
                     f"📭 Inbox খালি — এখনো কোনো মেইল আসেনি।\n`{state['address']}`",
                     parse_mode="Markdown",
-                    reply_markup=_tm_inbox_keyboard(),
+                    reply_markup=_tm_inbox_keyboard(state['address']),
                 )
                 return
             keyboard = telebot.types.InlineKeyboardMarkup(row_width=1)
@@ -546,7 +564,8 @@ def register_handlers(b, ctx=None):
             if code:
                 out += f"\n🔑 Verification code: {code}\n"
             out += f"\n{body}"
-            b.send_message(chat_id, out, reply_markup=_tm_inbox_keyboard())
+            b.send_message(chat_id, out,
+                           reply_markup=_tm_msg_keyboard(state['address'], code))
             return
 
     @b.message_handler(commands=['help'])
@@ -963,32 +982,54 @@ def register_handlers(b, ctx=None):
 
     @b.message_handler(commands=['gen', 'generate'])
     def gen_profile_cmd(message):
-        if not _admin_only(message): return
-        parts       = message.text.strip().split(maxsplit=1)
-        country_arg = parts[1].strip().lower() if len(parts) > 1 else "bangladesh"
-        country_details = get_country_details()
-        if country_arg not in country_details:
-            keys = ", ".join(k.capitalize() for k in country_details.keys())
-            b.reply_to(message, f"⚠️ অজানা দেশ। লিখুন: {keys}")
+        admin_id = get_admin_id()
+        if admin_id and message.from_user.id == admin_id:
+            # Admin: test profile (not saved to log/history).
+            parts       = message.text.strip().split(maxsplit=1)
+            country_arg = parts[1].strip().lower() if len(parts) > 1 else "bangladesh"
+            country_details = get_country_details()
+            if country_arg not in country_details:
+                keys = ", ".join(k.capitalize() for k in country_details.keys())
+                b.reply_to(message, f"⚠️ অজানা দেশ। লিখুন: {keys}")
+                return
+            try:
+                profile     = generate_profile(country_arg)
+                enabled     = CONFIG.get("bot_reply_fields", FIELD_KEYS)
+                field_lines = ""
+                for key in FIELD_KEYS:
+                    if key in enabled and key in profile:
+                        field_lines += f"{FIELD_EMOJI[key]} {FIELD_LABELS[key]}: `{profile[key]}`\n"
+                b.reply_to(message,
+                    f"🧪 *টেস্ট প্রোফাইল* — {country_arg.capitalize()}\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"{field_lines}"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"_(লগ বা হিস্ট্রিতে সেভ হয়নি)_",
+                    parse_mode="Markdown",
+                    reply_markup=build_profile_copy_keyboard(profile, enabled),
+                )
+            except Exception:
+                b.reply_to(message, "⚠️ প্রোফাইল তৈরি করা সম্ভব হয়নি।")
             return
-        try:
-            profile     = generate_profile(country_arg)
-            enabled     = CONFIG.get("bot_reply_fields", FIELD_KEYS)
-            field_lines = ""
-            for key in FIELD_KEYS:
-                if key in enabled and key in profile:
-                    field_lines += f"{FIELD_EMOJI[key]} {FIELD_LABELS[key]}: `{profile[key]}`\n"
-            b.reply_to(message,
-                f"🧪 *টেস্ট প্রোফাইল* — {country_arg.capitalize()}\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"{field_lines}"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"_(লগ বা হিস্ট্রিতে সেভ হয়নি)_",
-                parse_mode="Markdown",
-                reply_markup=build_profile_copy_keyboard(profile, enabled),
-            )
-        except Exception:
-            b.reply_to(message, "⚠️ প্রোফাইল তৈরি করা সম্ভব হয়নি।")
+        # Regular users: same Generate flow as the website —
+        # country menu, then a profile with copy buttons.
+        _track_entry_user(message)
+        if not _approval_guard(message):
+            return
+        if is_banned(message.from_user.id):
+            b.reply_to(message, get_text("banned_reply"))
+            return
+        parts = message.text.strip().split(maxsplit=1)
+        country_arg = parts[1].strip().lower() if len(parts) > 1 else ""
+        country_details = get_country_details()
+        if country_arg and country_arg in country_details:
+            _send_generated_profile(
+                message.chat.id, message.from_user, country_arg)
+        elif country_arg:
+            keys = ", ".join(k.capitalize() for k in country_details.keys())
+            b.reply_to(message, get_text("unknown_country", keys=keys))
+        else:
+            _send_country_menu(message, "generate")
 
     @b.message_handler(commands=['config'])
     def show_config_cmd(message):
