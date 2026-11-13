@@ -145,17 +145,24 @@ def register_handlers(b, ctx=None):
             tg_mention = f"@{tg}" if tg else "Not Available"
             dev_name = get_developer_name()
             dev_line = f"👤 Developer: {dev_name}\n" if dev_name else ""
+            text = get_text(
+                "profile_reply",
+                dev_line=dev_line,
+                tg_mention=tg_mention,
+                country=country_input.capitalize(),
+                field_lines=field_lines,
+            )
+            tm_address = _tm_auto_create_for_profile(chat_id, profile)
+            if tm_address:
+                text += f"\n📧 Temp Mail: `{tm_address}`\n"
+            else:
+                text += "\n⚠️ Temp mail বানানো যায়নি — /tempmail দিয়ে আবার চেষ্টা করুন।\n"
             b.send_message(
                 chat_id,
-                get_text(
-                    "profile_reply",
-                    dev_line=dev_line,
-                    tg_mention=tg_mention,
-                    country=country_input.capitalize(),
-                    field_lines=field_lines,
-                ),
+                text,
                 parse_mode="Markdown",
-                reply_markup=build_profile_copy_keyboard(profile, enabled),
+                reply_markup=build_profile_copy_keyboard(
+                    profile, enabled, tm_address),
             )
         except Exception:
             b.send_message(chat_id, get_text("profile_failed"))
@@ -217,18 +224,25 @@ def register_handlers(b, ctx=None):
                 b.delete_message(chat_id, wait_msg.message_id)
             except Exception:
                 pass
+            text = get_text(
+                "ai_reply",
+                dev_line=dev_line,
+                ai_badge=ai_badge,
+                tg_mention=tg_mention,
+                country=country_arg.capitalize(),
+                field_lines=field_lines,
+            )
+            tm_address = _tm_auto_create_for_profile(chat_id, profile)
+            if tm_address:
+                text += f"\n📧 Temp Mail: `{tm_address}`\n"
+            else:
+                text += "\n⚠️ Temp mail বানানো যায়নি — /tempmail দিয়ে আবার চেষ্টা করুন।\n"
             b.send_message(
                 chat_id,
-                get_text(
-                    "ai_reply",
-                    dev_line=dev_line,
-                    ai_badge=ai_badge,
-                    tg_mention=tg_mention,
-                    country=country_arg.capitalize(),
-                    field_lines=field_lines,
-                ),
+                text,
                 parse_mode="Markdown",
-                reply_markup=build_profile_copy_keyboard(profile, enabled),
+                reply_markup=build_profile_copy_keyboard(
+                    profile, enabled, tm_address),
             )
 
         Thread(target=_do_ainame, daemon=True).start()
@@ -436,6 +450,24 @@ def register_handlers(b, ctx=None):
             if address and token:
                 return address, token, name
         return None, None, None
+
+    def _tm_auto_create_for_profile(chat_id, profile):
+        """Auto-create a temp mail address from a generated profile's
+        username (same as the website's Generate flow: the address is
+        active immediately). Returns the address or ''. Never raises —
+        a failure must not block the profile message."""
+        try:
+            base = _tempmail_sanitize((profile or {}).get("username") or "")
+            if not base:
+                return ""
+            address, token, prov = _tm_create_for_provider("auto", base)
+            if not address or not token:
+                return ""
+            TM_STATE[chat_id] = {"address": address, "token": token,
+                                 "provider": prov}
+            return address
+        except Exception:
+            return ""
 
     @b.message_handler(commands=['tempmail'])
     def tempmail_command(message):
@@ -999,14 +1031,20 @@ def register_handlers(b, ctx=None):
                 for key in FIELD_KEYS:
                     if key in enabled and key in profile:
                         field_lines += f"{FIELD_EMOJI[key]} {FIELD_LABELS[key]}: `{profile[key]}`\n"
+                tm_address = _tm_auto_create_for_profile(
+                    message.chat.id, profile)
+                tm_line = (f"📧 Temp Mail: `{tm_address}`\n" if tm_address
+                           else "⚠️ Temp mail বানানো যায়নি — /tempmail দিয়ে আবার চেষ্টা করুন।\n")
                 b.reply_to(message,
                     f"🧪 *টেস্ট প্রোফাইল* — {country_arg.capitalize()}\n"
                     f"━━━━━━━━━━━━━━━━━━━━\n"
                     f"{field_lines}"
                     f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"{tm_line}"
                     f"_(লগ বা হিস্ট্রিতে সেভ হয়নি)_",
                     parse_mode="Markdown",
-                    reply_markup=build_profile_copy_keyboard(profile, enabled),
+                    reply_markup=build_profile_copy_keyboard(
+                        profile, enabled, tm_address),
                 )
             except Exception:
                 b.reply_to(message, "⚠️ প্রোফাইল তৈরি করা সম্ভব হয়নি।")
@@ -1147,13 +1185,21 @@ def register_handlers(b, ctx=None):
                     label = FIELD_LABELS[key]
                     field_lines += f"{emoji} {label}: `{profile[key]}`\n"
             dev_line = f"👤 Developer: {dev_name}\n" if dev_name else ""
+            text = get_text("profile_reply",
+                dev_line=dev_line, tg_mention=tg_mention,
+                country=country_input.capitalize(), field_lines=field_lines,
+            )
+            tm_address = _tm_auto_create_for_profile(
+                message.chat.id, profile)
+            if tm_address:
+                text += f"\n📧 Temp Mail: `{tm_address}`\n"
+            else:
+                text += "\n⚠️ Temp mail বানানো যায়নি — /tempmail দিয়ে আবার চেষ্টা করুন।\n"
             b.reply_to(message,
-                get_text("profile_reply",
-                    dev_line=dev_line, tg_mention=tg_mention,
-                    country=country_input.capitalize(), field_lines=field_lines,
-                ),
+                text,
                 parse_mode="Markdown",
-                reply_markup=build_profile_copy_keyboard(profile, enabled),
+                reply_markup=build_profile_copy_keyboard(
+                    profile, enabled, tm_address),
             )
         except Exception:
             b.reply_to(message, get_text("profile_failed"))

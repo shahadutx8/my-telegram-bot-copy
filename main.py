@@ -177,8 +177,12 @@ FIELD_EMOJI = {
 
 PROFILE_COPY_KEYS = ('full_name', 'google', 'email', 'mobile', 'username')
 
-def build_profile_copy_keyboard(profile: dict, enabled_fields) -> object | None:
-    """Return one protected Copy Text button for each useful profile field."""
+def build_profile_copy_keyboard(profile: dict, enabled_fields,
+                                tm_address=None) -> object | None:
+    """Return one protected Copy Text button for each useful profile field.
+
+    When tm_address is given (auto-created temp mail for this profile),
+    also add a Copy-address button and a Check-inbox button."""
     enabled = set(enabled_fields or FIELD_KEYS)
     buttons = []
     for key in PROFILE_COPY_KEYS:
@@ -191,10 +195,20 @@ def build_profile_copy_keyboard(profile: dict, enabled_fields) -> object | None:
                 copy_text=telebot.types.CopyTextButton(text=value[:256]),
             )
         )
-    if not buttons:
+    if not buttons and not tm_address:
         return None
     keyboard = telebot.types.InlineKeyboardMarkup(row_width=2)
-    keyboard.add(*buttons)
+    if buttons:
+        keyboard.add(*buttons)
+    if tm_address:
+        keyboard.add(
+            telebot.types.InlineKeyboardButton(
+                "📋 Copy address",
+                copy_text=telebot.types.CopyTextButton(
+                    text=tm_address[:256])),
+            telebot.types.InlineKeyboardButton(
+                "📬 Check inbox", callback_data="tm:inbox"),
+        )
     return keyboard
 
 # Minimal emergency fallback — used only when names_default.json is missing or corrupt.
