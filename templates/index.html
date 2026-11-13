@@ -193,6 +193,7 @@
     <div class="card">
       <h2>📧 Email verification</h2>
       <p style="color:#888;font-size:13px;margin:0 0 10px">The address is made from your generated username — verification codes (OTP) sent to it appear in the inbox below.</p>
+      <div id="tmProviderRow" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
       <div style="display:flex;gap:8px">
         <input id="tmName" placeholder="username" style="flex:1;min-width:0" autocomplete="off">
         <button class="big-btn" id="tmCreateBtn" style="width:auto;padding:10px 16px">Create</button>
@@ -469,20 +470,62 @@ async function loadFiles() {
 /* ── Email Verification ── */
 let tmToken = localStorage.getItem('fpg_tm_token') || '';
 let tmAddress = localStorage.getItem('fpg_tm_addr') || '';
+let tmProvider = localStorage.getItem('fpg_tm_provider') || '';
+let tmDomains = [], tmDomainsLoaded = false;
 let tmTimer = null;
+
+/* Provider pills (mail.tm / GuerrillaMail) from the live domains endpoint */
+async function tmLoadDomains() {
+  if (tmDomainsLoaded) { tmRenderProviders(); return; }
+  tmDomainsLoaded = true;
+  try {
+    const r = await fetch('/api/public/tempmail/domains');
+    const j = await r.json();
+    if (!j.success || !j.domains || !j.domains.length) return;
+    tmDomains = j.domains;
+    const row = document.getElementById('tmProviderRow');
+    row.innerHTML = '';
+    tmDomains.forEach(d => {
+      const b = document.createElement('button');
+      b.className = 'copy-btn';
+      b.style.padding = '6px 10px';
+      b.textContent = d.label + ' • ' + d.domain;
+      b.onclick = () => {
+        tmProvider = d.provider;
+        localStorage.setItem('fpg_tm_provider', tmProvider);
+        tmRenderProviders();
+      };
+      row.appendChild(b);
+    });
+    tmRenderProviders();
+  } catch (e) { /* auto provider — create still works without a pick */ }
+}
+function tmRenderProviders() {
+  const row = document.getElementById('tmProviderRow');
+  if (!row) return;
+  Array.from(row.children).forEach((b, i) => {
+    const sel = tmDomains[i] && tmDomains[i].provider === tmProvider;
+    b.style.background = sel ? '#6d5ef0' : '';
+    b.style.color = sel ? '#fff' : '';
+    b.style.borderColor = sel ? '#6d5ef0' : '';
+  });
+}
 
 /* Auto-create the verification address from the generated username */
 async function tmAutoCreate(username) {
   if (!username) return;
   document.getElementById('tmName').value = username;
   try {
+    const payload = { name: username };
+    if (tmProvider) payload.provider = tmProvider;
     const r = await fetch('/api/public/tempmail/create', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: username })
+      body: JSON.stringify(payload)
     });
     const j = await r.json();
     if (!j.success) return;
     tmToken = j.token; tmAddress = j.address;
+    if (j.provider) { tmProvider = j.provider; localStorage.setItem('fpg_tm_provider', tmProvider); tmRenderProviders(); }
     localStorage.setItem('fpg_tm_token', tmToken);
     localStorage.setItem('fpg_tm_addr', tmAddress);
     renderVerificationRow();
@@ -511,6 +554,7 @@ function removeVerificationRow() {
 }
 
 function tmInit() {
+  tmLoadDomains();
   const nameInput = document.getElementById('tmName');
   if (!nameInput.value && lastProfile && lastProfile.username) nameInput.value = lastProfile.username;
   if (tmToken && tmAddress) tmShowInbox();
@@ -521,13 +565,16 @@ async function tmCreate() {
   const name = document.getElementById('tmName').value.trim();
   btn.disabled = true; btn.textContent = 'Creating…';
   try {
+    const payload = { name };
+    if (tmProvider) payload.provider = tmProvider;
     const r = await fetch('/api/public/tempmail/create', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name })
+      body: JSON.stringify(payload)
     });
     const j = await r.json();
     if (!j.success) throw new Error(j.error || 'Creation failed');
     tmToken = j.token; tmAddress = j.address;
+    if (j.provider) { tmProvider = j.provider; localStorage.setItem('fpg_tm_provider', tmProvider); tmRenderProviders(); }
     localStorage.setItem('fpg_tm_token', tmToken);
     localStorage.setItem('fpg_tm_addr', tmAddress);
     tmShowInbox();
@@ -549,7 +596,9 @@ function tmShowInbox() {
 async function tmLoad() {
   const box = document.getElementById('tmList');
   try {
-    const r = await fetch('/api/public/tempmail/messages?token=' + encodeURIComponent(tmToken));
+    let url = '/api/public/tempmail/messages?token=' + encodeURIComponent(tmToken);
+    if (tmProvider) url += '&provider=' + encodeURIComponent(tmProvider);
+    const r = await fetch(url);
     const j = await r.json();
     if (!j.success) throw new Error(j.error || 'Inbox failed');
     const msgs = j.messages || [];
@@ -611,8 +660,10 @@ function tmExtractCode(text) {
 
 async function tmOpen(id) {
   try {
-    const r = await fetch('/api/public/tempmail/message/' + encodeURIComponent(id) +
-      '?token=' + encodeURIComponent(tmToken));
+    let url = '/api/public/tempmail/message/' + encodeURIComponent(id) +
+      '?token=' + encodeURIComponent(tmToken);
+    if (tmProvider) url += '&provider=' + encodeURIComponent(tmProvider);
+    const r = await fetch(url);
     const j = await r.json();
     if (!j.success) throw new Error(j.error || 'Message failed');
     const m = j.message;

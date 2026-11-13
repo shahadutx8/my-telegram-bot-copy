@@ -17,6 +17,7 @@ def register_handlers(b, ctx=None):
         "ai":       "🤖 AI Name",
         "history":  "📋 My History",
         "files":    "📂 Files",
+        "tempmail": "📧 Temp Mail",
         "help":     "❓ Help",
     }
 
@@ -33,7 +34,10 @@ def register_handlers(b, ctx=None):
             telebot.types.KeyboardButton(USER_MENU_BUTTONS["history"]),
             telebot.types.KeyboardButton(USER_MENU_BUTTONS["files"]),
         )
-        keyboard.add(telebot.types.KeyboardButton(USER_MENU_BUTTONS["help"]))
+        keyboard.add(
+            telebot.types.KeyboardButton(USER_MENU_BUTTONS["tempmail"]),
+            telebot.types.KeyboardButton(USER_MENU_BUTTONS["help"]),
+        )
         return keyboard
 
     def _country_keyboard(action: str):
@@ -362,6 +366,189 @@ def register_handlers(b, ctx=None):
         if not ok:
             b.reply_to(message, f"⚠️ {error}")
 
+    # ────────────────────────────────────────────
+    # Temp Mail — /tempmail (same providers as the website)
+    # State is per-chat, in-memory: {chat_id: {address, token, provider}}
+    # ────────────────────────────────────────────
+    TM_STATE = {}
+
+    def _tm_username_for(user):
+        base = _tempmail_sanitize(user.username or "")
+        if not base:
+            base = "user" + secrets_module.token_hex(3)
+        return base
+
+    def _tm_provider_keyboard():
+        keyboard = telebot.types.InlineKeyboardMarkup(row_width=2)
+        keyboard.add(
+            telebot.types.InlineKeyboardButton(
+                "mail.tm", callback_data="tm:provider:mailtm"),
+            telebot.types.InlineKeyboardButton(
+                "GuerrillaMail", callback_data="tm:provider:guerrilla"),
+        )
+        keyboard.add(telebot.types.InlineKeyboardButton(
+            "🎲 Auto (any)", callback_data="tm:provider:auto"))
+        return keyboard
+
+    def _tm_inbox_keyboard():
+        keyboard = telebot.types.InlineKeyboardMarkup(row_width=1)
+        keyboard.add(telebot.types.InlineKeyboardButton(
+            "📬 Check inbox", callback_data="tm:inbox"))
+        return keyboard
+
+    def _tm_create_for_provider(provider, base):
+        """Returns (address, token, provider) or (None, None, None)."""
+        if provider == "mailtm":
+            address, token = _mailtm_create(base)
+            return (address, token, "mailtm") if address and token \
+                else (None, None, None)
+        if provider == "guerrilla":
+            address, token = _guerrilla_create(base)
+            return (address, token, "guerrilla") if address and token \
+                else (None, None, None)
+        # auto — try the two long-lived providers in random order
+        makers = [("mailtm", _mailtm_create),
+                  ("guerrilla", _guerrilla_create)]
+        random.shuffle(makers)
+        for name, make in makers:
+            try:
+                address, token = make(base)
+            except Exception:
+                address, token = None, "failed"
+            if address and token:
+                return address, token, name
+        return None, None, None
+
+    @b.message_handler(commands=['tempmail'])
+    def tempmail_command(message):
+        _track_entry_user(message)
+        if not _approval_guard(message):
+            return
+        if is_banned(message.from_user.id):
+            b.reply_to(message, get_text("banned_reply"))
+            return
+        state = TM_STATE.get(message.chat.id)
+        text = "📧 *Temp Mail — Email Verification*\n\n"
+        if state:
+            text += f"বর্তমান address: `{state['address']}`\n\n"
+        text += "কোন provider দিয়ে নতুন address বানাবেন?"
+        b.reply_to(message, text, parse_mode="Markdown",
+                   reply_markup=_tm_provider_keyboard())
+
+    @b.callback_query_handler(
+        func=lambda call: bool(call.data and call.data.startswith("tm:")))
+    def tempmail_callback(call):
+        user = call.from_user
+        _track_entry_user(user)
+        if not is_user_approved(user.id):
+            try:
+                b.answer_callback_query(
+                    call.id,
+                    get_text(
+                        "approval_rejected"
+                        if get_approval_status(user.id) == "rejected"
+                        else "approval_pending",
+                    )[:200],
+                    show_alert=True,
+                )
+            except Exception:
+                pass
+            return
+        if is_banned(user.id):
+            try:
+                b.answer_callback_query(
+                    call.id, get_text("banned_reply")[:200], show_alert=True)
+            except Exception:
+                pass
+            return
+        try:
+            b.answer_callback_query(call.id)
+        except Exception:
+            pass
+        chat_id = call.message.chat.id
+        data = call.data or ""
+        if data.startswith("tm:provider:"):
+            provider = data.split(":", 2)[2]
+            base = _tm_username_for(user)
+            address, token, prov = _tm_create_for_provider(provider, base)
+            if not address or not token:
+                b.send_message(
+                    chat_id,
+                    "⚠️ Address বানানো যায়নি — একটু পরে আবার চেষ্টা করুন।")
+                return
+            TM_STATE[chat_id] = {"address": address, "token": token,
+                                 "provider": prov}
+            b.send_message(
+                chat_id,
+                f"📧 আপনার verification address:\n`{address}`\n\n"
+                f"Provider: {prov}\n"
+                f"এই address-এ পাঠানো verification code এখানেই দেখতে পাবেন।",
+                parse_mode="Markdown",
+                reply_markup=_tm_inbox_keyboard(),
+            )
+            return
+        if data == "tm:inbox":
+            state = TM_STATE.get(chat_id)
+            if not state:
+                b.send_message(
+                    chat_id,
+                    "📭 এখনো কোনো address বানানো হয়নি — /tempmail দিয়ে বানান।")
+                return
+            provider, inner = _tm_parse_token(state["token"])
+            msgs, err, _status = _tempmail_list_messages(provider, inner)
+            if err:
+                b.send_message(chat_id, f"⚠️ {err}")
+                return
+            if not msgs:
+                b.send_message(
+                    chat_id,
+                    f"📭 Inbox খালি — এখনো কোনো মেইল আসেনি।\n`{state['address']}`",
+                    parse_mode="Markdown",
+                    reply_markup=_tm_inbox_keyboard(),
+                )
+                return
+            keyboard = telebot.types.InlineKeyboardMarkup(row_width=1)
+            for m in msgs[:10]:
+                label = (m.get("subject") or "(no subject)")[:50]
+                keyboard.add(telebot.types.InlineKeyboardButton(
+                    f"✉️ {label}", callback_data=f"tm:msg:{m['id']}"))
+            keyboard.add(telebot.types.InlineKeyboardButton(
+                "↻ Refresh", callback_data="tm:inbox"))
+            b.send_message(
+                chat_id,
+                f"📬 Inbox — `{state['address']}`\nমেইল দেখতে একটিতে ট্যাপ করুন:",
+                parse_mode="Markdown",
+                reply_markup=keyboard,
+            )
+            return
+        if data.startswith("tm:msg:"):
+            state = TM_STATE.get(chat_id)
+            if not state:
+                b.send_message(
+                    chat_id,
+                    "📭 এখনো কোনো address বানানো হয়নি — /tempmail দিয়ে বানান।")
+                return
+            msg_id = data.split(":", 2)[2]
+            provider, inner = _tm_parse_token(state["token"])
+            msg, err, _status = _tempmail_read_message(provider, inner, msg_id)
+            if err or not msg:
+                b.send_message(chat_id, f"⚠️ {err or 'মেইলটি খোলা যায়নি।'}")
+                return
+            # Plain text (no Markdown) — mail bodies contain raw
+            # *, _, ` and [ characters that would break parsing.
+            text = msg.get("text") or _html_to_text(msg.get("html") or "")
+            code = _tempmail_extract_code(text)
+            body = text[:3000]
+            if len(text) > 3000:
+                body += "\n…"
+            out = f"✉️ {msg.get('subject') or '(no subject)'}\n"
+            out += f"From: {msg.get('from') or ''}\n"
+            if code:
+                out += f"\n🔑 Verification code: {code}\n"
+            out += f"\n{body}"
+            b.send_message(chat_id, out, reply_markup=_tm_inbox_keyboard())
+            return
+
     @b.message_handler(commands=['help'])
     def help_command(message):
         _track_entry_user(message)
@@ -408,6 +595,10 @@ def register_handlers(b, ctx=None):
     @b.message_handler(func=lambda message: (message.text or "").strip() == USER_MENU_BUTTONS["help"])
     def menu_help(message):
         help_command(message)
+
+    @b.message_handler(func=lambda message: (message.text or "").strip() == USER_MENU_BUTTONS["tempmail"])
+    def menu_tempmail(message):
+        tempmail_command(message)
 
     @b.callback_query_handler(func=lambda call: bool(call.data and call.data.startswith("menu:")))
     def menu_callback(call):

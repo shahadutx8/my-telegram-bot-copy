@@ -1552,6 +1552,32 @@ def _tm_parse_token(raw):
         return "guerrilla", raw[3:]
     return "mailtm", raw
 
+def _tempmail_extract_code(text):
+    """Mirror of the frontend tmExtractCode(): pull a 4–8 digit OTP
+    out of a message body. Used by the Telegram bot."""
+    if not text:
+        return ""
+    m = re.search(r"(?:code|otp|verification|verify)[^\d]{0,60}(\d{4,8})",
+                  text, re.I)
+    if m:
+        return m.group(1)
+    m = re.search(r"\b(\d{4,8})\b", text)
+    return m.group(1) if m else ""
+
+def _html_to_text(html):
+    """Best-effort HTML → plain text (Telegram bot message view)."""
+    import html as _htmlmod
+    if not html:
+        return ""
+    t = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", html)
+    t = re.sub(r"(?is)<br\s*/?>", "\n", t)
+    t = re.sub(r"(?is)</(p|div|tr|li|h\d)>", "\n", t)
+    t = re.sub(r"(?is)<[^>]+>", "", t)
+    t = _htmlmod.unescape(t)
+    t = re.sub(r"[ \t]+", " ", t)
+    t = re.sub(r"\n\s*\n+", "\n\n", t)
+    return t.strip()
+
 def _mailtm_create(base):
     """Returns (address, token) or (None, 'rate_limited'|'failed')."""
     domains = _mailtm_domains()
@@ -1610,6 +1636,25 @@ def _guerrilla_create(base):
             continue  # name was taken / rewritten — try suffixed name once
     return None, "failed"
 
+_guerrilla_domain_cache = {"at": 0.0, "domain": ""}
+
+def _guerrilla_domain():
+    """GuerrillaMail has no domain-list API — the domain is assigned per
+    address. Learn it live from one get_email_address call (cached 1h),
+    falling back to the last known domain."""
+    now = _time_module.time()
+    if now - _guerrilla_domain_cache["at"] < 3600 \
+            and _guerrilla_domain_cache["domain"]:
+        return _guerrilla_domain_cache["domain"]
+    status, data = _http_json("GET", GM_API + "?" + _urlparse.urlencode(
+        {"f": "get_email_address", "lang": "en"}))
+    if status == 200 and isinstance(data, dict) and data.get("email_addr"):
+        dom = str(data["email_addr"]).rsplit("@", 1)[-1].strip().lower()
+        if "." in dom:
+            _guerrilla_domain_cache.update(at=now, domain=dom)
+            return dom
+    return _guerrilla_domain_cache["domain"] or "guerrillamailblock.com"
+
 @app.route('/api/public/tempmail/create', methods=['POST'])
 def api_public_tempmail_create():
     ip = _public_ip()
@@ -1626,10 +1671,19 @@ def api_public_tempmail_create():
     # only a fallback — otherwise OTPs die while the user waits.
     # The two long-lived providers are shuffled so load spreads
     # across them; a 429 on one just moves on to the next.
-    makers = [("mailtm", _mailtm_create),
-              ("guerrilla", _guerrilla_create)]
-    random.shuffle(makers)
-    makers.append(("tempmail", _tempmail_create))
+    # A "provider" choice (site picker / bot) pins one provider.
+    provider = (data.get("provider") or "").strip().lower()
+    if provider == "mailtm":
+        makers = [("mailtm", _mailtm_create)]
+    elif provider == "guerrilla":
+        makers = [("guerrilla", _guerrilla_create)]
+    elif provider == "tempmail":
+        makers = [("tempmail", _tempmail_create)]
+    else:
+        makers = [("mailtm", _mailtm_create),
+                  ("guerrilla", _guerrilla_create)]
+        random.shuffle(makers)
+        makers.append(("tempmail", _tempmail_create))
     saw_rate_limited = False
     for _name, make in makers:
         try:
@@ -1656,12 +1710,10 @@ def _tml_from_field(m, *keys):
             return v
     return ""
 
-@app.route('/api/public/tempmail/messages')
-def api_public_tempmail_messages():
-    token = (request.args.get("token") or "")[:2000]
-    if not token:
-        return jsonify(success=False, error='Missing token'), 400
-    provider, inner = _tm_parse_token(token)
+def _tempmail_list_messages(provider, inner):
+    """Fetch + normalize an inbox list for any provider.
+    Returns (messages, error, http_status); error is None on success.
+    Shared by the public API routes and the Telegram bot."""
     if provider == "tempmail":
         status, data = _http_json(
             "GET", TML_API + "/inbox?token=" + _urlparse.quote(inner))
@@ -1672,10 +1724,9 @@ def api_public_tempmail_messages():
             status, data = _http_json(
                 "GET", TML_API + "/inbox?token=" + _urlparse.quote(inner))
         if status != 200 or not isinstance(data, dict):
-            return jsonify(success=False, error='Inbox unavailable.'), 502
+            return None, 'Inbox unavailable.', 502
         if data.get("expired"):
-            return jsonify(success=False,
-                           error='Inbox expired — create a new address.'), 502
+            return None, 'Inbox expired — create a new address.', 502
         msgs = []
         for i, m in enumerate(data.get("emails") or []):
             if not isinstance(m, dict):
@@ -1689,14 +1740,14 @@ def api_public_tempmail_messages():
                 "date": m.get("date") or m.get("createdAt") or "",
                 "seen": bool(m.get("seen")),
             })
-        return jsonify(success=True, messages=msgs)
+        return msgs, None, 200
     if provider == "guerrilla":
         q = _urlparse.urlencode({"f": "check_email", "seq": "0",
                                  "sid_token": inner, "lang": "en"})
         status, data = _http_json("GET", GM_API + "?" + q)
         if status != 200 or not isinstance(data, dict) \
                 or not isinstance(data.get("list"), list):
-            return jsonify(success=False, error='Inbox unavailable.'), 502
+            return None, 'Inbox unavailable.', 502
         msgs = []
         for m in data["list"]:
             if not isinstance(m, dict):
@@ -1712,14 +1763,13 @@ def api_public_tempmail_messages():
                 "date": m.get("mail_date", "") or "",
                 "seen": bool(m.get("mail_read")),
             })
-        return jsonify(success=True, messages=msgs)
+        return msgs, None, 200
     # mail.tm (incl. legacy bare JWTs)
     status, data = _mailtm_request("GET", "/messages", token=inner)
     if status in (401, 403):
-        return jsonify(success=False,
-                       error='Inbox session expired — create a new address.'), 502
+        return None, 'Inbox session expired — create a new address.', 502
     if status != 200:
-        return jsonify(success=False, error='Inbox unavailable.'), 502
+        return None, 'Inbox unavailable.', 502
     msgs = []
     for m in _hydra_list(data):
         if not isinstance(m, dict):
@@ -1733,6 +1783,94 @@ def api_public_tempmail_messages():
             "date": m.get("createdAt", "") or "",
             "seen": bool(m.get("seen")),
         })
+    return msgs, None, 200
+
+def _tempmail_read_message(provider, inner, msg_id):
+    """Fetch + normalize one message for any provider.
+    Returns (message, error, http_status); error is None on success.
+    Shared by the public API routes and the Telegram bot."""
+    if provider == "tempmail":
+        status, data = _http_json(
+            "GET", TML_API + "/inbox?token=" + _urlparse.quote(inner))
+        if status != 200 or not isinstance(data, dict):
+            return None, 'Message unavailable.', 502
+        for m in data.get("emails") or []:
+            if not isinstance(m, dict):
+                continue
+            if str(m.get("id") or m.get("uid") or "") != msg_id:
+                continue
+            html = m.get("html") or ""
+            if isinstance(html, list):
+                html = "\n".join(x for x in html if isinstance(x, str))
+            return {
+                "id": msg_id,
+                "from": _tml_from_field(m, "from", "sender"),
+                "subject": m.get("subject") or "(no subject)",
+                "date": m.get("date") or m.get("createdAt") or "",
+                "text": m.get("body") or m.get("text") or "",
+                "html": html,
+            }, None, 200
+        return None, 'Message unavailable.', 502
+    if provider == "guerrilla":
+        q = _urlparse.urlencode({"f": "fetch_email", "email_id": msg_id,
+                                 "sid_token": inner, "lang": "en"})
+        status, m = _http_json("GET", GM_API + "?" + q)
+        if status != 200 or not isinstance(m, dict) or not m.get("mail_id"):
+            return None, 'Message unavailable.', 502
+        html = m.get("mail_body", "") or ""
+        if isinstance(html, list):
+            html = "\n".join(x for x in html if isinstance(x, str))
+        return {
+            "id": msg_id,
+            "from": m.get("mail_from", "") or "",
+            "subject": m.get("mail_subject", "") or "(no subject)",
+            "date": m.get("mail_date", "") or "",
+            "text": "",
+            "html": html,
+        }, None, 200
+    status, m = _mailtm_request("GET", "/messages/" + msg_id, token=inner)
+    if status != 200 or not isinstance(m, dict):
+        return None, 'Message unavailable.', 502
+    frm = m.get("from") or {}
+    html = m.get("html", "") or ""
+    if isinstance(html, list):
+        html = "\n".join(x for x in html if isinstance(x, str))
+    return {
+        "id": m.get("id", ""),
+        "from": frm.get("address", "") or frm.get("name", ""),
+        "subject": m.get("subject", "") or "(no subject)",
+        "date": m.get("createdAt", "") or "",
+        "text": m.get("text", "") or "",
+        "html": html,
+    }, None, 200
+
+@app.route('/api/public/tempmail/domains')
+def api_public_tempmail_domains():
+    """Combined live domain list: mail.tm (pickable) + GuerrillaMail
+    (domain assigned by the provider — learned live, cached 1h)."""
+    domains = []
+    for d in _mailtm_domains():
+        domains.append({"provider": "mailtm", "domain": d, "label": "mail.tm"})
+    gdom = _guerrilla_domain()
+    if gdom:
+        domains.append({"provider": "guerrilla", "domain": gdom,
+                        "label": "GuerrillaMail"})
+    return jsonify(success=True, domains=domains)
+
+@app.route('/api/public/tempmail/messages')
+def api_public_tempmail_messages():
+    token = (request.args.get("token") or "")[:2000]
+    if not token:
+        return jsonify(success=False, error='Missing token'), 400
+    provider, inner = _tm_parse_token(token)
+    # An explicit provider param covers bare tokens without a prefix.
+    explicit = (request.args.get("provider") or "").strip().lower()
+    if explicit in ("mailtm", "tempmail", "guerrilla") \
+            and not token.startswith(("mtm:", "tml:", "gm:")):
+        provider = explicit
+    msgs, err, status = _tempmail_list_messages(provider, inner)
+    if err:
+        return jsonify(success=False, error=err), status
     return jsonify(success=True, messages=msgs)
 
 @app.route('/api/public/tempmail/message/<msg_id>')
@@ -1744,60 +1882,15 @@ def api_public_tempmail_message(msg_id):
     if not msg_id:
         return jsonify(success=False, error='Bad message id'), 400
     provider, inner = _tm_parse_token(token)
-    if provider == "tempmail":
-        status, data = _http_json(
-            "GET", TML_API + "/inbox?token=" + _urlparse.quote(inner))
-        if status != 200 or not isinstance(data, dict):
-            return jsonify(success=False, error='Message unavailable.'), 502
-        for m in data.get("emails") or []:
-            if not isinstance(m, dict):
-                continue
-            if str(m.get("id") or m.get("uid") or "") != msg_id:
-                continue
-            html = m.get("html") or ""
-            if isinstance(html, list):
-                html = "\n".join(x for x in html if isinstance(x, str))
-            return jsonify(success=True, message={
-                "id": msg_id,
-                "from": _tml_from_field(m, "from", "sender"),
-                "subject": m.get("subject") or "(no subject)",
-                "date": m.get("date") or m.get("createdAt") or "",
-                "text": m.get("body") or m.get("text") or "",
-                "html": html,
-            })
-        return jsonify(success=False, error='Message unavailable.'), 502
-    if provider == "guerrilla":
-        q = _urlparse.urlencode({"f": "fetch_email", "email_id": msg_id,
-                                 "sid_token": inner, "lang": "en"})
-        status, m = _http_json("GET", GM_API + "?" + q)
-        if status != 200 or not isinstance(m, dict) or not m.get("mail_id"):
-            return jsonify(success=False, error='Message unavailable.'), 502
-        html = m.get("mail_body", "") or ""
-        if isinstance(html, list):
-            html = "\n".join(x for x in html if isinstance(x, str))
-        return jsonify(success=True, message={
-            "id": msg_id,
-            "from": m.get("mail_from", "") or "",
-            "subject": m.get("mail_subject", "") or "(no subject)",
-            "date": m.get("mail_date", "") or "",
-            "text": "",
-            "html": html,
-        })
-    status, m = _mailtm_request("GET", "/messages/" + msg_id, token=inner)
-    if status != 200 or not isinstance(m, dict):
-        return jsonify(success=False, error='Message unavailable.'), 502
-    frm = m.get("from") or {}
-    html = m.get("html", "") or ""
-    if isinstance(html, list):
-        html = "\n".join(x for x in html if isinstance(x, str))
-    return jsonify(success=True, message={
-        "id": m.get("id", ""),
-        "from": frm.get("address", "") or frm.get("name", ""),
-        "subject": m.get("subject", "") or "(no subject)",
-        "date": m.get("createdAt", "") or "",
-        "text": m.get("text", "") or "",
-        "html": html,
-    })
+    # An explicit provider param covers bare tokens without a prefix.
+    explicit = (request.args.get("provider") or "").strip().lower()
+    if explicit in ("mailtm", "tempmail", "guerrilla") \
+            and not token.startswith(("mtm:", "tml:", "gm:")):
+        provider = explicit
+    msg, err, status = _tempmail_read_message(provider, inner, msg_id)
+    if err:
+        return jsonify(success=False, error=err), status
+    return jsonify(success=True, message=msg)
 
 # --------------------------------------------
 # Flask Routes — Dashboard
