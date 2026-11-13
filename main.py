@@ -638,23 +638,41 @@ def make_bot(token: str):
         return None, str(e)
 
 def start_bot_polling(b):
-    """Run infinity_polling in a daemon thread."""
-    try:
-        b.remove_webhook()
-        b.infinity_polling(skip_pending=True)
-    except Exception as e:
-        bot_status["running"] = False
-        bot_status["error"] = str(e)
-        # Notify admin about the crash
-        admin_id = get_admin_id()
-        if admin_id:
-            try:
-                b.send_message(
-                    admin_id,
-                    get_text("bot_crash_notify", error=str(e)[:300])
-                )
-            except Exception:
-                pass
+    """Run infinity_polling in a daemon thread.
+
+    Startup is retried on Telegram 409 Conflict: during a Render
+    deploy the old instance may still be polling, and Telegram
+    answers the new instance's first getUpdates with 409 — without
+    a retry the bot thread dies and the bot stays stopped even after
+    the old instance is gone. (skip_pending's getUpdates runs before
+    infinity_polling's own retry loop, so the retry must be here.)
+    """
+    last_error = ""
+    for attempt in range(6):
+        try:
+            b.remove_webhook()
+            bot_status["error"] = ""
+            b.infinity_polling(skip_pending=True)
+            return  # stopped cleanly via stop_polling — do not restart
+        except Exception as e:
+            last_error = str(e)
+            bot_status["running"] = False
+            bot_status["error"] = last_error
+            if "409" not in last_error and "Conflict" not in last_error:
+                break
+            _time_module.sleep(10 * (attempt + 1))
+    bot_status["running"] = False
+    bot_status["error"] = last_error
+    # Notify admin about the crash
+    admin_id = get_admin_id()
+    if admin_id:
+        try:
+            b.send_message(
+                admin_id,
+                get_text("bot_crash_notify", error=str(last_error)[:300])
+            )
+        except Exception:
+            pass
 
 def launch_bot(token: str):
     """Stop any existing bot and start a new one."""
