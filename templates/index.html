@@ -358,18 +358,49 @@ async function generate() {
   btn.disabled = false; btn.textContent = '⚡ Generate Profile';
 }
 
-function fieldRow(emoji, label, value) {
+/* Render an email address with explicit break opportunities (<wbr>)
+   after "@" and after each "." in the domain, so it wraps at "@"
+   (never mid-word) even where "@" is not treated as a break point.
+   Builds DOM nodes only — the copied text stays the plain address. */
+function tmSetAddrHTML(el, address) {
+  el.textContent = '';
+  const at = address.indexOf('@');
+  if (at < 0) { el.textContent = address; return; }
+  el.appendChild(document.createTextNode(address.slice(0, at + 1)));
+  el.appendChild(document.createElement('wbr'));
+  const domain = address.slice(at + 1);
+  domain.split('.').forEach((part, i, arr) => {
+    el.appendChild(document.createTextNode(part));
+    if (i < arr.length - 1) {
+      el.appendChild(document.createTextNode('.'));
+      el.appendChild(document.createElement('wbr'));
+    }
+  });
+}
+
+function fieldRow(emoji, label, value, breakable, fullWidth) {
   const row = document.createElement('div');
   row.className = 'field-row';
   const em = document.createElement('span'); em.className = 'emoji'; em.textContent = emoji;
   const meta = document.createElement('div'); meta.className = 'meta';
   const lb = document.createElement('div'); lb.className = 'label'; lb.textContent = label;
-  const vl = document.createElement('div'); vl.className = 'value'; vl.textContent = value;
-  meta.appendChild(lb); meta.appendChild(vl);
+  const vl = document.createElement('div'); vl.className = 'value';
+  if (breakable) tmSetAddrHTML(vl, value); else vl.textContent = value;
+  meta.appendChild(lb);
   const cb = document.createElement('button');
   cb.className = 'copy-btn'; cb.textContent = 'Copy';
   cb.onclick = () => copyText(value, cb);
-  row.appendChild(em); row.appendChild(meta); row.appendChild(cb);
+  if (fullWidth) {
+    // Value on its own full-width line (like the tab's address box):
+    // the row is too narrow for a long domain to fit beside the button,
+    // so the value gets the whole row width and only wraps at "@".
+    row.style.flexWrap = 'wrap';
+    vl.style.flex = '1 1 100%';
+    row.appendChild(em); row.appendChild(meta); row.appendChild(cb); row.appendChild(vl);
+  } else {
+    meta.appendChild(vl);
+    row.appendChild(em); row.appendChild(meta); row.appendChild(cb);
+  }
   return row;
 }
 
@@ -540,11 +571,11 @@ function renderVerificationRow() {
   let row = document.getElementById('verifRow');
   if (!tmAddress) { if (row) row.remove(); return; }
   if (!row) {
-    row = fieldRow('\uD83D\uDCE7', 'Email Verification', tmAddress);
+    row = fieldRow('\uD83D\uDCE7', 'Email Verification', tmAddress, true, true);
     row.id = 'verifRow';
     box.appendChild(row);
   } else {
-    row.querySelector('.value').textContent = tmAddress;
+    tmSetAddrHTML(row.querySelector('.value'), tmAddress);
     const cb = row.querySelector('.copy-btn');
     cb.onclick = () => copyText(tmAddress, cb);
   }
@@ -585,7 +616,7 @@ async function tmCreate() {
 
 function tmShowInbox() {
   document.getElementById('tmAddrBox').style.display = 'block';
-  document.getElementById('tmAddr').textContent = tmAddress;
+  tmSetAddrHTML(document.getElementById('tmAddr'), tmAddress);
   document.getElementById('tmInboxCard').style.display = 'block';
   document.getElementById('tmMsgCard').style.display = 'none';
   renderVerificationRow();
@@ -700,9 +731,22 @@ async function tmOpen(id) {
       codeBox.style.display = 'none';
     }
     const body = document.getElementById('tmMsgBody');
-    if (m.html) body.innerHTML = tmSanitizeHtml(m.html);
-    else if (m.text) body.textContent = m.text;
-    else body.textContent = '(No readable message body or code found — the mail may contain only an image.)';
+    const NOTE = '(No readable message body or code found — the mail may contain only an image.)';
+    body.innerHTML = '';
+    if (!plain.trim()) {
+      // Textless html (e.g. image-only mail): show the note above the
+      // html so an image can still load and show below it.
+      const note = document.createElement('div');
+      note.textContent = NOTE;
+      note.style.cssText = 'color:#888;font-size:13px;margin-bottom:10px';
+      body.appendChild(note);
+      if (m.html) {
+        const wrap = document.createElement('div');
+        wrap.innerHTML = tmSanitizeHtml(m.html);
+        body.appendChild(wrap);
+      }
+    } else if (m.html) body.innerHTML = tmSanitizeHtml(m.html);
+    else body.textContent = m.text;
     tmLoad();
   } catch (e) { showError(e.message); }
 }
