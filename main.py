@@ -454,8 +454,10 @@ def load_config():
     return defaults
 
 def save_config(cfg: dict):
+    """Persist config to the DB. Returns True on success — callers
+    that must not silently lose data (e.g. the bot token) check this."""
     with config_lock:
-        db_set("config", cfg)
+        return db_set("config", cfg)
 
 def get_text(key: str, **kwargs) -> str:
     """Fetch a bot message template from CONFIG (dashboard-editable) and format it.
@@ -2254,7 +2256,15 @@ def api_set_bot_token():
     if not ok:
         return jsonify(success=False, error=f'Invalid token: {err}')
     CONFIG['bot_token'] = token
-    save_config(CONFIG)
+    if not save_config(CONFIG):
+        # The bot is running in memory right now, but the token was
+        # NOT saved — it will be lost on the next restart/deploy.
+        # Say so instead of reporting success (this silent failure
+        # is why the bot kept going down after deploys).
+        return jsonify(success=False,
+                       error='Bot connected for now, but the token could '
+                             'not be saved — it will be lost on restart. '
+                             'Please try connecting again.')
     return jsonify(success=True, message='✅ Bot connected successfully!')
 
 @app.route('/api/stop-bot', methods=['POST'])
