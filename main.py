@@ -1586,15 +1586,36 @@ def _tm_parse_token(raw):
 
 def _tempmail_extract_code(text):
     """Mirror of the frontend tmExtractCode(): pull a 4–8 digit OTP
-    out of a message body. Used by the Telegram bot."""
+    out of a message body. Used by the Telegram bot.
+    Also finds codes printed with spaces/dashes between digits
+    (e.g. "1 2 3 4 5 6" or "123-456"), common in OTP mails where
+    the digits sit in separate spans."""
     if not text:
         return ""
     m = re.search(r"(?:code|otp|verification|verify)[^\d]{0,60}(\d{4,8})",
                   text, re.I)
     if m:
         return m.group(1)
+    # Join digit separators, then retry near the keyword — a code
+    # next to "code/OTP" wins over a stray standalone number.
+    squashed = re.sub(r"(\d)[ \-\u00a0·•]+(?=\d)", r"\1", text)
+    m = re.search(r"(?:code|otp|verification|verify)[^\d]{0,60}(\d{4,8})",
+                  squashed, re.I)
+    if m:
+        return m.group(1)
     m = re.search(r"\b(\d{4,8})\b", text)
-    return m.group(1) if m else ""
+    if m:
+        return m.group(1)
+    # Standalone digit groups separated by spaces/dashes, e.g.
+    # "123 456" or "1 2 3 4 5 6". Each group is 1–3 digits so a
+    # date like "14 11 2026" cannot match.
+    m = re.search(r"(?:^|[^\d])((?:\d{1,3}[ \-\u00a0]){1,7}\d{1,3})(?!\d)",
+                  text)
+    if m:
+        digits = re.sub(r"[ \-\u00a0]", "", m.group(1))
+        if 4 <= len(digits) <= 8:
+            return digits
+    return ""
 
 def _html_to_text(html):
     """Best-effort HTML → plain text (Telegram bot message view)."""
@@ -1686,6 +1707,20 @@ def _guerrilla_domain():
             _guerrilla_domain_cache.update(at=now, domain=dom)
             return dom
     return _guerrilla_domain_cache["domain"] or "guerrillamailblock.com"
+
+def _guerrilla_excerpt(sid_token, msg_id):
+    """mail_excerpt for one message, from check_email. Used when
+    fetch_email returns an empty body — the excerpt often holds the
+    start of the message (and the code). Returns "" if unavailable."""
+    q = _urlparse.urlencode({"f": "check_email", "seq": "0",
+                             "sid_token": sid_token, "lang": "en"})
+    status, data = _http_json("GET", GM_API + "?" + q)
+    if status != 200 or not isinstance(data, dict):
+        return ""
+    for m in data.get("list") or []:
+        if isinstance(m, dict) and str(m.get("mail_id", "")) == str(msg_id):
+            return (m.get("mail_excerpt", "") or "").strip()
+    return ""
 
 @app.route('/api/public/tempmail/create', methods=['POST'])
 def api_public_tempmail_create():
@@ -1852,6 +1887,19 @@ def _tempmail_read_message(provider, inner, msg_id):
         html = m.get("mail_body", "") or ""
         if isinstance(html, list):
             html = "\n".join(x for x in html if isinstance(x, str))
+        if not html.strip():
+            # Empty body — fall back to the inbox excerpt so the user
+            # at least sees the message start (and any code in it).
+            excerpt = _guerrilla_excerpt(inner, msg_id)
+            if excerpt:
+                return {
+                    "id": msg_id,
+                    "from": m.get("mail_from", "") or "",
+                    "subject": m.get("mail_subject", "") or "(no subject)",
+                    "date": m.get("mail_date", "") or "",
+                    "text": excerpt,
+                    "html": "",
+                }, None, 200
         return {
             "id": msg_id,
             "from": m.get("mail_from", "") or "",

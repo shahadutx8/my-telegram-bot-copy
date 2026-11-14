@@ -65,7 +65,7 @@
   .field-row .emoji { font-size: 18px; }
   .field-row .meta { flex: 1; min-width: 0; }
   .field-row .label { font-size: 11px; color: #777; text-transform: uppercase; letter-spacing: .5px; }
-  .field-row .value { font-size: 15px; color: #fff; word-break: break-all; font-family: ui-monospace, monospace; }
+  .field-row .value { font-size: 15px; color: #fff; overflow-wrap: anywhere; word-break: normal; font-family: ui-monospace, monospace; }
   .copy-btn {
     background: #22223a; border: 1px solid rgba(255,255,255,0.1); color: #bbb;
     border-radius: 8px; padding: 7px 11px; font-size: 12px; cursor: pointer; flex-shrink: 0;
@@ -199,10 +199,11 @@
         <button class="big-btn" id="tmCreateBtn" style="width:auto;padding:10px 16px">Create</button>
       </div>
       <div id="tmAddrBox" style="display:none;margin-top:10px">
-        <div class="field-row">
+        <div class="field-row" style="flex-wrap:wrap">
           <span class="emoji">✉️</span>
-          <div class="meta"><div class="label">Your verification address</div><div class="value" id="tmAddr"></div></div>
+          <div class="meta"><div class="label">Your verification address</div></div>
           <button class="copy-btn" id="tmCopyBtn">Copy</button>
+          <div class="value" id="tmAddr" style="flex:1 1 100%;overflow-wrap:anywhere;word-break:normal"></div>
         </div>
       </div>
     </div>
@@ -649,13 +650,29 @@ function tmPlainText(html) {
   d.innerHTML = html;
   return d.textContent || '';
 }
-/* Pull the OTP / verification code out of the message text */
+/* Pull the OTP / verification code out of the message text.
+   Also finds codes printed with spaces/dashes between digits
+   (e.g. "1 2 3 4 5 6" or "123-456"). */
 function tmExtractCode(text) {
   if (!text) return '';
   const near = text.match(/(?:code|otp|verification|verify)[^\d]{0,60}(\d{4,8})/i);
   if (near) return near[1];
+  // Join digit separators, then retry near the keyword — a code
+  // next to "code/OTP" wins over a stray standalone number.
+  const squashed = text.replace(/(\d)[ \-\u00a0·•]+(?=\d)/g, '$1');
+  const near2 = squashed.match(/(?:code|otp|verification|verify)[^\d]{0,60}(\d{4,8})/i);
+  if (near2) return near2[1];
   const any = text.match(/\b(\d{4,8})\b/);
-  return any ? any[1] : '';
+  if (any) return any[1];
+  // Standalone digit groups separated by spaces/dashes, e.g.
+  // "123 456" or "1 2 3 4 5 6". Each group is 1–3 digits so a
+  // date like "14 11 2026" cannot match.
+  const grp = text.match(/(?:^|[^\d])((?:\d{1,3}[ \-\u00a0]){1,7}\d{1,3})(?!\d)/);
+  if (grp) {
+    const digits = grp[1].replace(/[ \-\u00a0]/g, '');
+    if (digits.length >= 4 && digits.length <= 8) return digits;
+  }
+  return '';
 }
 
 async function tmOpen(id) {
@@ -685,7 +702,7 @@ async function tmOpen(id) {
     const body = document.getElementById('tmMsgBody');
     if (m.html) body.innerHTML = tmSanitizeHtml(m.html);
     else if (m.text) body.textContent = m.text;
-    else body.textContent = '(empty message)';
+    else body.textContent = '(No readable message body or code found — the mail may contain only an image.)';
     tmLoad();
   } catch (e) { showError(e.message); }
 }
