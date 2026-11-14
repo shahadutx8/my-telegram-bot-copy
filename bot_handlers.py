@@ -152,7 +152,7 @@ def register_handlers(b, ctx=None):
                 country=country_input.capitalize(),
                 field_lines=field_lines,
             )
-            tm_address = _tm_auto_create_for_profile(chat_id, profile)
+            tm_address, tm_idx = _tm_auto_create_for_profile(chat_id, profile)
             if tm_address:
                 text += f"\n📧 Temp Mail: `{tm_address}`\n"
             else:
@@ -162,7 +162,7 @@ def register_handlers(b, ctx=None):
                 text,
                 parse_mode="Markdown",
                 reply_markup=build_profile_copy_keyboard(
-                    profile, enabled, tm_address),
+                    profile, enabled, tm_address, tm_idx),
             )
         except Exception:
             b.send_message(chat_id, get_text("profile_failed"))
@@ -232,7 +232,7 @@ def register_handlers(b, ctx=None):
                 country=country_arg.capitalize(),
                 field_lines=field_lines,
             )
-            tm_address = _tm_auto_create_for_profile(chat_id, profile)
+            tm_address, tm_idx = _tm_auto_create_for_profile(chat_id, profile)
             if tm_address:
                 text += f"\n📧 Temp Mail: `{tm_address}`\n"
             else:
@@ -242,7 +242,7 @@ def register_handlers(b, ctx=None):
                 text,
                 parse_mode="Markdown",
                 reply_markup=build_profile_copy_keyboard(
-                    profile, enabled, tm_address),
+                    profile, enabled, tm_address, tm_idx),
             )
 
         Thread(target=_do_ainame, daemon=True).start()
@@ -382,9 +382,37 @@ def register_handlers(b, ctx=None):
 
     # ────────────────────────────────────────────
     # Temp Mail — /tempmail (same providers as the website)
-    # State is per-chat, in-memory: {chat_id: {address, token, provider}}
+    # State is per-chat, in-memory: {chat_id: [mailbox, ...]} where each
+    # mailbox is {address, token, provider}. New mailboxes APPEND — a
+    # profile generation must not orphan the previous mailbox's mail,
+    # so inbox/message buttons carry the mailbox index (see below).
     # ────────────────────────────────────────────
     TM_STATE = {}
+
+    def _tm_boxes(chat_id):
+        boxes = TM_STATE.get(chat_id)
+        return boxes if isinstance(boxes, list) else []
+
+    def _tm_latest(chat_id):
+        boxes = _tm_boxes(chat_id)
+        return boxes[-1] if boxes else None
+
+    def _tm_latest_idx(chat_id):
+        boxes = _tm_boxes(chat_id)
+        return len(boxes) - 1 if boxes else None
+
+    def _tm_box(chat_id, idx):
+        boxes = _tm_boxes(chat_id)
+        if idx is None or idx < 0 or idx >= len(boxes):
+            return None
+        return boxes[idx]
+
+    def _tm_add_box(chat_id, box):
+        """Append a mailbox for this chat; return its index."""
+        boxes = _tm_boxes(chat_id)
+        boxes.append(box)
+        TM_STATE[chat_id] = boxes
+        return len(boxes) - 1
 
     def _tm_username_for(user):
         base = _tempmail_sanitize(user.username or "")
@@ -404,17 +432,18 @@ def register_handlers(b, ctx=None):
             "🎲 Auto (any)", callback_data="tm:provider:auto"))
         return keyboard
 
-    def _tm_inbox_keyboard(address=None):
+    def _tm_inbox_keyboard(address=None, idx=None):
         keyboard = telebot.types.InlineKeyboardMarkup(row_width=1)
         if address:
             keyboard.add(telebot.types.InlineKeyboardButton(
                 "📋 Copy address",
                 copy_text=telebot.types.CopyTextButton(text=address[:256])))
+        inbox_cb = f"tm:inbox:{idx}" if idx is not None else "tm:inbox"
         keyboard.add(telebot.types.InlineKeyboardButton(
-            "📬 Check inbox", callback_data="tm:inbox"))
+            "📬 Check inbox", callback_data=inbox_cb))
         return keyboard
 
-    def _tm_msg_keyboard(address, code=None):
+    def _tm_msg_keyboard(address, code=None, idx=None):
         keyboard = telebot.types.InlineKeyboardMarkup(row_width=1)
         if code:
             keyboard.add(telebot.types.InlineKeyboardButton(
@@ -424,8 +453,9 @@ def register_handlers(b, ctx=None):
             keyboard.add(telebot.types.InlineKeyboardButton(
                 "📋 Copy address",
                 copy_text=telebot.types.CopyTextButton(text=address[:256])))
+        inbox_cb = f"tm:inbox:{idx}" if idx is not None else "tm:inbox"
         keyboard.add(telebot.types.InlineKeyboardButton(
-            "📬 Check inbox", callback_data="tm:inbox"))
+            "📬 Check inbox", callback_data=inbox_cb))
         return keyboard
 
     def _tm_create_for_provider(provider, base):
@@ -454,20 +484,22 @@ def register_handlers(b, ctx=None):
     def _tm_auto_create_for_profile(chat_id, profile):
         """Auto-create a temp mail address from a generated profile's
         username (same as the website's Generate flow: the address is
-        active immediately). Returns the address or ''. Never raises —
-        a failure must not block the profile message."""
+        active immediately). Appends to this chat's mailbox history
+        instead of replacing it. Returns (address, box_index) or
+        ('', None). Never raises — a failure must not block the
+        profile message."""
         try:
             base = _tempmail_sanitize((profile or {}).get("username") or "")
             if not base:
-                return ""
+                return "", None
             address, token, prov = _tm_create_for_provider("auto", base)
             if not address or not token:
-                return ""
-            TM_STATE[chat_id] = {"address": address, "token": token,
-                                 "provider": prov}
-            return address
+                return "", None
+            idx = _tm_add_box(chat_id, {"address": address, "token": token,
+                                        "provider": prov})
+            return address, idx
         except Exception:
-            return ""
+            return "", None
 
     @b.message_handler(commands=['tempmail'])
     def tempmail_command(message):
@@ -477,7 +509,7 @@ def register_handlers(b, ctx=None):
         if is_banned(message.from_user.id):
             b.reply_to(message, get_text("banned_reply"))
             return
-        state = TM_STATE.get(message.chat.id)
+        state = _tm_latest(message.chat.id)
         text = "📧 *Temp Mail — Email Verification*\n\n"
         if state:
             text += f"বর্তমান address: `{state['address']}`\n\n"
@@ -526,19 +558,30 @@ def register_handlers(b, ctx=None):
                     chat_id,
                     "⚠️ Address বানানো যায়নি — একটু পরে আবার চেষ্টা করুন।")
                 return
-            TM_STATE[chat_id] = {"address": address, "token": token,
-                                 "provider": prov}
+            idx = _tm_add_box(chat_id, {"address": address, "token": token,
+                                        "provider": prov})
             b.send_message(
                 chat_id,
                 f"📧 আপনার verification address:\n`{address}`\n\n"
                 f"Provider: {prov}\n"
                 f"এই address-এ পাঠানো verification code এখানেই দেখতে পাবেন।",
                 parse_mode="Markdown",
-                reply_markup=_tm_inbox_keyboard(address),
+                reply_markup=_tm_inbox_keyboard(address, idx),
             )
             return
-        if data == "tm:inbox":
-            state = TM_STATE.get(chat_id)
+        if data == "tm:inbox" or data.startswith("tm:inbox:"):
+            # Indexed form (tm:inbox:<idx>) checks THAT mailbox; the
+            # bare form falls back to the latest mailbox.
+            idx = None
+            if data.startswith("tm:inbox:"):
+                try:
+                    idx = int(data.split(":", 2)[2])
+                except (ValueError, IndexError):
+                    idx = None
+            state = _tm_box(chat_id, idx)
+            if state is None:
+                idx = _tm_latest_idx(chat_id)
+                state = _tm_latest(chat_id)
             if not state:
                 b.send_message(
                     chat_id,
@@ -554,16 +597,20 @@ def register_handlers(b, ctx=None):
                     chat_id,
                     f"📭 Inbox খালি — এখনো কোনো মেইল আসেনি।\n`{state['address']}`",
                     parse_mode="Markdown",
-                    reply_markup=_tm_inbox_keyboard(state['address']),
+                    reply_markup=_tm_inbox_keyboard(state['address'], idx),
                 )
                 return
             keyboard = telebot.types.InlineKeyboardMarkup(row_width=1)
             for m in msgs[:10]:
                 label = (m.get("subject") or "(no subject)")[:50]
+                msg_cb = (f"tm:msg:{idx}:{m['id']}" if idx is not None
+                          else f"tm:msg:{m['id']}")
                 keyboard.add(telebot.types.InlineKeyboardButton(
-                    f"✉️ {label}", callback_data=f"tm:msg:{m['id']}"))
+                    f"✉️ {label}", callback_data=msg_cb))
+            refresh_cb = (f"tm:inbox:{idx}" if idx is not None
+                          else "tm:inbox")
             keyboard.add(telebot.types.InlineKeyboardButton(
-                "↻ Refresh", callback_data="tm:inbox"))
+                "↻ Refresh", callback_data=refresh_cb))
             b.send_message(
                 chat_id,
                 f"📬 Inbox — `{state['address']}`\nমেইল দেখতে একটিতে ট্যাপ করুন:",
@@ -572,13 +619,25 @@ def register_handlers(b, ctx=None):
             )
             return
         if data.startswith("tm:msg:"):
-            state = TM_STATE.get(chat_id)
+            # Indexed form (tm:msg:<idx>:<id>) opens the mail from THAT
+            # mailbox; the bare form (tm:msg:<id>) uses the latest.
+            parts = data.split(":")
+            if len(parts) >= 4 and parts[2].isdigit():
+                idx = int(parts[2])
+                msg_id = ":".join(parts[3:])
+                state = _tm_box(chat_id, idx)
+            else:
+                idx = None
+                msg_id = ":".join(parts[2:])
+                state = None
+            if state is None:
+                idx = _tm_latest_idx(chat_id)
+                state = _tm_latest(chat_id)
             if not state:
                 b.send_message(
                     chat_id,
                     "📭 এখনো কোনো address বানানো হয়নি — /tempmail দিয়ে বানান।")
                 return
-            msg_id = data.split(":", 2)[2]
             provider, inner = _tm_parse_token(state["token"])
             msg, err, _status = _tempmail_read_message(provider, inner, msg_id)
             if err or not msg:
@@ -595,9 +654,14 @@ def register_handlers(b, ctx=None):
             out += f"From: {msg.get('from') or ''}\n"
             if code:
                 out += f"\n🔑 Verification code: {code}\n"
-            out += f"\n{body}"
+            if body.strip():
+                out += f"\n{body}"
+            else:
+                out += ("\n(No readable message body or code found — "
+                        "the mail may contain only an image.)")
             b.send_message(chat_id, out,
-                           reply_markup=_tm_msg_keyboard(state['address'], code))
+                           reply_markup=_tm_msg_keyboard(
+                               state['address'], code, idx))
             return
 
     @b.message_handler(commands=['help'])
@@ -1031,7 +1095,7 @@ def register_handlers(b, ctx=None):
                 for key in FIELD_KEYS:
                     if key in enabled and key in profile:
                         field_lines += f"{FIELD_EMOJI[key]} {FIELD_LABELS[key]}: `{profile[key]}`\n"
-                tm_address = _tm_auto_create_for_profile(
+                tm_address, tm_idx = _tm_auto_create_for_profile(
                     message.chat.id, profile)
                 tm_line = (f"📧 Temp Mail: `{tm_address}`\n" if tm_address
                            else "⚠️ Temp mail বানানো যায়নি — /tempmail দিয়ে আবার চেষ্টা করুন।\n")
@@ -1044,7 +1108,7 @@ def register_handlers(b, ctx=None):
                     f"_(লগ বা হিস্ট্রিতে সেভ হয়নি)_",
                     parse_mode="Markdown",
                     reply_markup=build_profile_copy_keyboard(
-                        profile, enabled, tm_address),
+                        profile, enabled, tm_address, tm_idx),
                 )
             except Exception:
                 b.reply_to(message, "⚠️ প্রোফাইল তৈরি করা সম্ভব হয়নি।")
@@ -1189,7 +1253,7 @@ def register_handlers(b, ctx=None):
                 dev_line=dev_line, tg_mention=tg_mention,
                 country=country_input.capitalize(), field_lines=field_lines,
             )
-            tm_address = _tm_auto_create_for_profile(
+            tm_address, tm_idx = _tm_auto_create_for_profile(
                 message.chat.id, profile)
             if tm_address:
                 text += f"\n📧 Temp Mail: `{tm_address}`\n"
@@ -1199,7 +1263,7 @@ def register_handlers(b, ctx=None):
                 text,
                 parse_mode="Markdown",
                 reply_markup=build_profile_copy_keyboard(
-                    profile, enabled, tm_address),
+                    profile, enabled, tm_address, tm_idx),
             )
         except Exception:
             b.reply_to(message, get_text("profile_failed"))

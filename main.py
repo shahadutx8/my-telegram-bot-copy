@@ -178,11 +178,14 @@ FIELD_EMOJI = {
 PROFILE_COPY_KEYS = ('full_name', 'google', 'email', 'mobile', 'username')
 
 def build_profile_copy_keyboard(profile: dict, enabled_fields,
-                                tm_address=None) -> object | None:
+                                tm_address=None, tm_box_idx=None) -> object | None:
     """Return one protected Copy Text button for each useful profile field.
 
     When tm_address is given (auto-created temp mail for this profile),
-    also add a Copy-address button and a Check-inbox button."""
+    also add a Copy-address button and a Check-inbox button. When
+    tm_box_idx is given, the Check-inbox button is bound to that
+    mailbox (tm:inbox:<idx>) so it checks THIS profile's address even
+    after a later profile creates a new mailbox."""
     enabled = set(enabled_fields or FIELD_KEYS)
     buttons = []
     for key in PROFILE_COPY_KEYS:
@@ -201,13 +204,15 @@ def build_profile_copy_keyboard(profile: dict, enabled_fields,
     if buttons:
         keyboard.add(*buttons)
     if tm_address:
+        inbox_cb = (f"tm:inbox:{tm_box_idx}" if tm_box_idx is not None
+                    else "tm:inbox")
         keyboard.add(
             telebot.types.InlineKeyboardButton(
                 "📋 Copy address",
                 copy_text=telebot.types.CopyTextButton(
                     text=tm_address[:256])),
             telebot.types.InlineKeyboardButton(
-                "📬 Check inbox", callback_data="tm:inbox"),
+                "📬 Check inbox", callback_data=inbox_cb),
         )
     return keyboard
 
@@ -1812,8 +1817,14 @@ def _tempmail_list_messages(provider, inner):
         q = _urlparse.urlencode({"f": "check_email", "seq": "0",
                                  "sid_token": inner, "lang": "en"})
         status, data = _http_json("GET", GM_API + "?" + q)
-        if status != 200 or not isinstance(data, dict) \
-                or not isinstance(data.get("list"), list):
+        if status != 200 or not isinstance(data, dict):
+            return None, 'Inbox unavailable.', 502
+        if isinstance(data.get("error"), str) and data["error"]:
+            # Invalid/expired session (GuerrillaMail answers
+            # check_email with an "error" and no list) — say so
+            # instead of reporting an empty or broken inbox.
+            return None, 'Inbox session expired — create a new address.', 502
+        if not isinstance(data.get("list"), list):
             return None, 'Inbox unavailable.', 502
         msgs = []
         for m in data["list"]:
