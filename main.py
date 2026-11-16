@@ -1785,19 +1785,17 @@ def api_public_tempmail_create():
     # tempmail.lol expires after ~10 min without a check (1h hard limit),
     # so it is only a fallback — otherwise OTPs die while the user waits.
     # GuerrillaMail was removed 2026-11-16 (it returns empty mail for
-    # some OTP senders); a stale "guerrilla" choice just falls through
-    # to the default below. A "provider" choice (site picker / bot)
-    # pins one provider.
+    # some OTP senders); mail.tm was removed 2026-11-16 too (the own
+    # VPS server works). A stale "guerrilla"/"mailtm" choice just falls
+    # through to the default below. A "provider" choice (site picker /
+    # bot) pins one provider.
     provider = (data.get("provider") or "").strip().lower()
     if provider == "vpsmail":
         makers = [("vpsmail", _vpsmail_create)]
-    elif provider == "mailtm":
-        makers = [("mailtm", _mailtm_create)]
     elif provider == "tempmail":
         makers = [("tempmail", _tempmail_create)]
     else:
         makers = [("vpsmail", _vpsmail_create),
-                  ("mailtm", _mailtm_create),
                   ("tempmail", _tempmail_create)]
     saw_rate_limited = False
     for _name, make in makers:
@@ -2029,15 +2027,14 @@ def _tempmail_read_message(provider, inner, msg_id):
 
 @app.route('/api/public/tempmail/domains')
 def api_public_tempmail_domains():
-    """Live domain list: mail.tm + the own VPS server ("My Mail").
-    GuerrillaMail was removed 2026-11-16 (it returns empty mail for
-    some OTP senders)."""
+    """Live domain list: the own VPS server ("My Mail") only.
+    mail.tm was removed 2026-11-16 (the own server works);
+    GuerrillaMail was removed earlier the same day (it returns
+    empty mail for some OTP senders)."""
     domains = []
     if VPSMAIL_DOMAIN:
         domains.append({"provider": "vpsmail", "domain": VPSMAIL_DOMAIN,
                         "label": "My Mail"})
-    for d in _mailtm_domains():
-        domains.append({"provider": "mailtm", "domain": d, "label": "mail.tm"})
     return jsonify(success=True, domains=domains)
 
 @app.route('/api/public/tempmail/messages')
