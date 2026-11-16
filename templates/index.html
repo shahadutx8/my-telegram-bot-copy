@@ -676,6 +676,18 @@ function tmSanitizeHtml(html) {
   });
   return d.innerHTML;
 }
+/* GuerrillaMail rewrites every image in a mail to
+   /res.php?r=1&n=img&q=<real-url> which only shows a "blocked by GM"
+   placeholder. Replace it with the real URL from the q parameter so an
+   OTP image actually displays (the documented "Display Images" step). */
+function tmUnblockGmImages(html) {
+  if (!html) return html;
+  return html.replace(/["']\/res\.php\?r=1(?:&amp;|&)n=[a-z]+(?:&amp;|&)q=([^"']+)["']/gi,
+    function (m, q) {
+      try { return '"' + decodeURIComponent(q.replace(/&amp;/g, '&')) + '"'; }
+      catch (e) { return m; }
+    });
+}
 function tmPlainText(html) {
   const d = document.createElement('div');
   d.innerHTML = html;
@@ -730,8 +742,12 @@ async function tmOpen(id) {
     } else {
       codeBox.style.display = 'none';
     }
+    const html = tmUnblockGmImages(m.html || '');
     const body = document.getElementById('tmMsgBody');
-    const NOTE = '(No readable message body or code found — the mail may contain only an image.)';
+    const hasAtt = m.attachments && m.attachments.length;
+    const NOTE = hasAtt
+      ? '(No readable text found — the code may be inside the attached image below. Read it from the image.)'
+      : '(No readable message body or code found — the mail may contain only an image.)';
     body.innerHTML = '';
     if (!plain.trim()) {
       // Textless html (e.g. image-only mail): show the note above the
@@ -740,13 +756,40 @@ async function tmOpen(id) {
       note.textContent = NOTE;
       note.style.cssText = 'color:#888;font-size:13px;margin-bottom:10px';
       body.appendChild(note);
-      if (m.html) {
+      if (html) {
         const wrap = document.createElement('div');
-        wrap.innerHTML = tmSanitizeHtml(m.html);
+        wrap.innerHTML = tmSanitizeHtml(html);
         body.appendChild(wrap);
       }
-    } else if (m.html) body.innerHTML = tmSanitizeHtml(m.html);
+    } else if (html) body.innerHTML = tmSanitizeHtml(html);
     else body.textContent = m.text;
+    if (hasAtt) {
+      const attBox = document.createElement('div');
+      attBox.style.cssText = 'margin-top:12px;border-top:1px solid #333;padding-top:10px';
+      const head = document.createElement('div');
+      head.textContent = 'Attachments';
+      head.style.cssText = 'color:#aaa;font-size:13px;margin-bottom:8px';
+      attBox.appendChild(head);
+      m.attachments.forEach(function (a) {
+        const url = '/api/public/tempmail/attachment/' + encodeURIComponent(id) +
+          '/' + encodeURIComponent(a.part_id) +
+          '?token=' + encodeURIComponent(tmToken) + '&provider=guerrilla';
+        if (/\.(png|jpe?g|gif|webp|bmp)$/i.test(a.name || '')) {
+          const img = document.createElement('img');
+          img.src = url;
+          img.alt = a.name || 'attachment';
+          img.style.cssText = 'max-width:100%;border-radius:8px;margin-bottom:8px;background:#fff';
+          attBox.appendChild(img);
+        }
+        const link = document.createElement('a');
+        link.href = url;
+        link.textContent = 'Download ' + (a.name || 'attachment');
+        link.style.cssText = 'display:block;color:#8ab4ff;font-size:13px;margin-bottom:6px';
+        link.target = '_blank';
+        attBox.appendChild(link);
+      });
+      body.appendChild(attBox);
+    }
     tmLoad();
   } catch (e) { showError(e.message); }
 }

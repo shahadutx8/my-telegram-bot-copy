@@ -1715,6 +1715,48 @@ def _guerrilla_domain():
             return dom
     return _guerrilla_domain_cache["domain"] or "guerrillamailblock.com"
 
+def _guerrilla_attachments(m):
+    """Normalize GuerrillaMail fetch_email attachment info into a list of
+    {"name": ..., "part_id": ...}. OTP mails often carry the code as an
+    image attachment, which is the only place the code exists when the
+    body and excerpt are both empty. Returns [] when there are none."""
+    out = []
+    info = m.get("att_info")
+    if isinstance(info, list):
+        for i, a in enumerate(info):
+            if not isinstance(a, dict):
+                continue
+            name = a.get("f") or a.get("filename") or a.get("name") \
+                or "attachment"
+            part = a.get("part_id") or a.get("part") or a.get("id")
+            if part is None:
+                part = str(i)
+            out.append({"name": str(name), "part_id": str(part)})
+    elif m.get("att"):
+        try:
+            n = int(m.get("att"))
+        except Exception:
+            n = 0
+        out = [{"name": "attachment %d" % (i + 1), "part_id": str(i)}
+               for i in range(max(0, n))]
+    return out
+
+
+def _http_bytes(url, timeout=15):
+    """Raw-bytes GET (for attachment proxying). Returns
+    (status, bytes, content_type)."""
+    req = _urlreq.Request(url, method="GET")
+    req.add_header("User-Agent", "Mozilla/5.0")
+    try:
+        with _urlreq.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.read(), \
+                (resp.headers.get("Content-Type") or "")
+    except _urlerr.HTTPError as e:
+        return e.code, b"", ""
+    except Exception:
+        return 0, b"", ""
+
+
 def _guerrilla_excerpt(sid_token, msg_id):
     """mail_excerpt for one message, from check_email. Used when
     fetch_email returns an empty body — the excerpt often holds the
@@ -1912,6 +1954,7 @@ def _tempmail_read_message(provider, inner, msg_id):
                     "date": m.get("mail_date", "") or "",
                     "text": excerpt,
                     "html": "",
+                    "attachments": _guerrilla_attachments(m),
                 }, None, 200
         return {
             "id": msg_id,
@@ -1920,6 +1963,7 @@ def _tempmail_read_message(provider, inner, msg_id):
             "date": m.get("mail_date", "") or "",
             "text": "",
             "html": html,
+            "attachments": _guerrilla_attachments(m),
         }, None, 200
     status, m = _mailtm_request("GET", "/messages/" + msg_id, token=inner)
     if status != 200 or not isinstance(m, dict):
@@ -1984,6 +2028,34 @@ def api_public_tempmail_message(msg_id):
     if err:
         return jsonify(success=False, error=err), status
     return jsonify(success=True, message=msg)
+
+
+@app.route('/api/public/tempmail/attachment/<msg_id>/<part_id>')
+def api_public_tempmail_attachment(msg_id, part_id):
+    """Proxy one GuerrillaMail attachment (usually the image that holds
+    the OTP code) so the browser can display it. The sid_token never
+    leaves the server in a page URL the user would share."""
+    token = (request.args.get("token") or "")[:2000]
+    if not token:
+        return jsonify(success=False, error='Missing token'), 400
+    provider, inner = _tm_parse_token(token)
+    if provider != "guerrilla":
+        return jsonify(success=False,
+                       error='Attachments are only supported for GuerrillaMail'), 400
+    msg_id = re.sub(r"[^a-zA-Z0-9_-]", "", msg_id)[:128]
+    part_id = re.sub(r"[^a-zA-Z0-9_.-]", "", part_id)[:128]
+    if not msg_id or not part_id:
+        return jsonify(success=False, error='Bad attachment'), 400
+    url = ("https://www.guerrillamail.com/inbox?get_att&lang=en"
+           "&sid_token=" + _urlparse.quote(inner) +
+           "&email_id=" + _urlparse.quote(msg_id) +
+           "&part_id=" + _urlparse.quote(part_id))
+    status, data, ctype = _http_bytes(url)
+    if status != 200 or not data:
+        return jsonify(success=False, error='Attachment unavailable.'), 502
+    ctype = (ctype or "").split(";")[0].strip() or "application/octet-stream"
+    return send_file(io.BytesIO(data), mimetype=ctype, as_attachment=False)
+
 
 # --------------------------------------------
 # Flask Routes — Dashboard

@@ -659,6 +659,9 @@ def register_handlers(b, ctx=None):
             else:
                 out += ("\n(No readable message body or code found — "
                         "the mail may contain only an image.)")
+            if not code and msg.get("attachments"):
+                out += ("\n\n🖼️ এই মেইলে ছবি attachment আছে — কোডটা ছবির "
+                        "ভিতরে থাকতে পারে। ওয়েবসাইটে মেইলটা খুলে ছবিটা দেখো।")
             b.send_message(chat_id, out,
                            reply_markup=_tm_msg_keyboard(
                                state['address'], code, idx))
