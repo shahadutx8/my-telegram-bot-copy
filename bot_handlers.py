@@ -424,6 +424,8 @@ def register_handlers(b, ctx=None):
         keyboard = telebot.types.InlineKeyboardMarkup(row_width=2)
         keyboard.add(
             telebot.types.InlineKeyboardButton(
+                "My Mail", callback_data="tm:provider:vpsmail"),
+            telebot.types.InlineKeyboardButton(
                 "mail.tm", callback_data="tm:provider:mailtm"),
         )
         keyboard.add(telebot.types.InlineKeyboardButton(
@@ -458,12 +460,18 @@ def register_handlers(b, ctx=None):
 
     def _tm_create_for_provider(provider, base):
         """Returns (address, token, provider) or (None, None, None)."""
+        if provider == "vpsmail":
+            address, token = _vpsmail_create(base)
+            return (address, token, "vpsmail") if address and token \
+                else (None, None, None)
         if provider == "mailtm":
             address, token = _mailtm_create(base)
             return (address, token, "mailtm") if address and token \
                 else (None, None, None)
-        # auto — mail.tm only (GuerrillaMail removed 2026-11-16)
-        makers = [("mailtm", _mailtm_create)]
+        # auto — own VPS server first, then mail.tm
+        # (GuerrillaMail removed 2026-11-16)
+        makers = [("vpsmail", _vpsmail_create),
+                  ("mailtm", _mailtm_create)]
         for name, make in makers:
             try:
                 address, token = make(base)

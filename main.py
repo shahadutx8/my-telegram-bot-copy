@@ -1587,6 +1587,8 @@ def _tm_parse_token(raw):
         return "mailtm", raw[4:]
     if raw.startswith("tml:"):
         return "tempmail", raw[4:]
+    if raw.startswith("vps:"):
+        return "vpsmail", raw[4:]
     if raw.startswith("gm:"):
         return "guerrilla", raw[3:]
     return "mailtm", raw
@@ -1679,6 +1681,14 @@ def _tempmail_create(base):
         return data["address"], "tml:" + str(data["token"])
     return None, "failed"
 
+def _vpsmail_create(base):
+    """Own VPS server: no API call — catch-all means the address works
+    the moment it is used. Returns (address, token) or (None, reason)."""
+    if not VPSMAIL_DOMAIN:
+        return None, "failed"
+    addr = base + "@" + VPSMAIL_DOMAIN
+    return addr, "vps:" + addr
+
 def _guerrilla_attachments(m):
     """Normalize GuerrillaMail fetch_email attachment info into a list of
     {"name": ..., "part_id": ...}. OTP mails often carry the code as an
@@ -1721,6 +1731,32 @@ def _http_bytes(url, timeout=15):
         return 0, b"", ""
 
 
+VPSMAIL_API = os.environ.get("VPSMAIL_API_URL", "").rstrip("/")
+VPSMAIL_DOMAIN = os.environ.get("VPSMAIL_DOMAIN", "").strip().lower()
+VPSMAIL_SECRET = os.environ.get("VPSMAIL_API_SECRET", "")
+
+def _vpsmail_get(path, params):
+    """GET the VPS mail API with the secret header.
+    Returns (status, dict)."""
+    if not VPSMAIL_API or not VPSMAIL_SECRET:
+        return 0, {}
+    url = VPSMAIL_API + path + "?" + _urlparse.urlencode(params)
+    req = _urlreq.Request(url, method="GET")
+    req.add_header("x-vpsmail-secret", VPSMAIL_SECRET)
+    req.add_header("User-Agent", "Mozilla/5.0")
+    try:
+        with _urlreq.urlopen(req, timeout=12) as resp:
+            raw = resp.read().decode("utf-8")
+            return resp.status, (json.loads(raw) if raw else {})
+    except _urlerr.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read().decode("utf-8") or "{}")
+        except Exception:
+            return e.code, {}
+    except Exception:
+        return 0, {}
+
+
 def _guerrilla_excerpt(sid_token, msg_id):
     """mail_excerpt for one message, from check_email. Used when
     fetch_email returns an empty body — the excerpt often holds the
@@ -1753,12 +1789,15 @@ def api_public_tempmail_create():
     # to the default below. A "provider" choice (site picker / bot)
     # pins one provider.
     provider = (data.get("provider") or "").strip().lower()
-    if provider == "mailtm":
+    if provider == "vpsmail":
+        makers = [("vpsmail", _vpsmail_create)]
+    elif provider == "mailtm":
         makers = [("mailtm", _mailtm_create)]
     elif provider == "tempmail":
         makers = [("tempmail", _tempmail_create)]
     else:
-        makers = [("mailtm", _mailtm_create),
+        makers = [("vpsmail", _vpsmail_create),
+                  ("mailtm", _mailtm_create),
                   ("tempmail", _tempmail_create)]
     saw_rate_limited = False
     for _name, make in makers:
@@ -1790,6 +1829,24 @@ def _tempmail_list_messages(provider, inner):
     """Fetch + normalize an inbox list for any provider.
     Returns (messages, error, http_status); error is None on success.
     Shared by the public API routes and the Telegram bot."""
+    if provider == "vpsmail":
+        status, data = _vpsmail_get("/inbox", {"address": inner})
+        if status != 200 or not isinstance(data, dict) \
+                or not data.get("success"):
+            return None, 'Inbox unavailable.', 502
+        msgs = []
+        for m in data.get("messages") or []:
+            if not isinstance(m, dict):
+                continue
+            msgs.append({
+                "id": str(m.get("id", "")),
+                "from": m.get("from", "") or "",
+                "subject": m.get("subject") or "(no subject)",
+                "intro": (m.get("intro", "") or "")[:120],
+                "date": m.get("date", "") or "",
+                "seen": bool(m.get("seen")),
+            })
+        return msgs, None, 200
     if provider == "tempmail":
         status, data = _http_json(
             "GET", TML_API + "/inbox?token=" + _urlparse.quote(inner))
@@ -1871,6 +1928,35 @@ def _tempmail_read_message(provider, inner, msg_id):
     """Fetch + normalize one message for any provider.
     Returns (message, error, http_status); error is None on success.
     Shared by the public API routes and the Telegram bot."""
+    if provider == "vpsmail":
+        status, data = _vpsmail_get(
+            "/message", {"id": msg_id, "address": inner})
+        if status != 200 or not isinstance(data, dict) \
+                or not data.get("success"):
+            return None, 'Message unavailable.', 502
+        m = data.get("message") or {}
+        atts = []
+        for i, a in enumerate(m.get("attachments") or []):
+            if not isinstance(a, dict):
+                continue
+            # Inline data: URI — the frontend renders it directly,
+            # no proxy route needed (unlike the GuerrillaMail one).
+            atts.append({
+                "name": a.get("name") or "attachment",
+                "part_id": str(i),
+                "data": "data:%s;base64,%s" % (
+                    a.get("contentType") or "application/octet-stream",
+                    a.get("data") or ""),
+            })
+        return {
+            "id": msg_id,
+            "from": m.get("from", "") or "",
+            "subject": m.get("subject") or "(no subject)",
+            "date": m.get("date", "") or "",
+            "text": m.get("text", "") or "",
+            "html": m.get("html", "") or "",
+            "attachments": atts,
+        }, None, 200
     if provider == "tempmail":
         status, data = _http_json(
             "GET", TML_API + "/inbox?token=" + _urlparse.quote(inner))
@@ -1943,9 +2029,13 @@ def _tempmail_read_message(provider, inner, msg_id):
 
 @app.route('/api/public/tempmail/domains')
 def api_public_tempmail_domains():
-    """Live domain list: mail.tm only. GuerrillaMail was removed
-    2026-11-16 (it returns empty mail for some OTP senders)."""
+    """Live domain list: mail.tm + the own VPS server ("My Mail").
+    GuerrillaMail was removed 2026-11-16 (it returns empty mail for
+    some OTP senders)."""
     domains = []
+    if VPSMAIL_DOMAIN:
+        domains.append({"provider": "vpsmail", "domain": VPSMAIL_DOMAIN,
+                        "label": "My Mail"})
     for d in _mailtm_domains():
         domains.append({"provider": "mailtm", "domain": d, "label": "mail.tm"})
     return jsonify(success=True, domains=domains)
@@ -1958,8 +2048,8 @@ def api_public_tempmail_messages():
     provider, inner = _tm_parse_token(token)
     # An explicit provider param covers bare tokens without a prefix.
     explicit = (request.args.get("provider") or "").strip().lower()
-    if explicit in ("mailtm", "tempmail", "guerrilla") \
-            and not token.startswith(("mtm:", "tml:", "gm:")):
+    if explicit in ("mailtm", "tempmail", "guerrilla", "vpsmail") \
+            and not token.startswith(("mtm:", "tml:", "gm:", "vps:")):
         provider = explicit
     msgs, err, status = _tempmail_list_messages(provider, inner)
     if err:
@@ -1977,8 +2067,8 @@ def api_public_tempmail_message(msg_id):
     provider, inner = _tm_parse_token(token)
     # An explicit provider param covers bare tokens without a prefix.
     explicit = (request.args.get("provider") or "").strip().lower()
-    if explicit in ("mailtm", "tempmail", "guerrilla") \
-            and not token.startswith(("mtm:", "tml:", "gm:")):
+    if explicit in ("mailtm", "tempmail", "guerrilla", "vpsmail") \
+            and not token.startswith(("mtm:", "tml:", "gm:", "vps:")):
         provider = explicit
     msg, err, status = _tempmail_read_message(provider, inner, msg_id)
     if err:

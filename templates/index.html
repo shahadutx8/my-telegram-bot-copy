@@ -771,7 +771,10 @@ async function tmOpen(id) {
       head.style.cssText = 'color:#aaa;font-size:13px;margin-bottom:8px';
       attBox.appendChild(head);
       m.attachments.forEach(function (a) {
-        const url = '/api/public/tempmail/attachment/' + encodeURIComponent(id) +
+        // vpsmail attachments carry an inline data: URI — use it
+        // directly; GuerrillaMail ones go through the proxy route.
+        const url = a.data ? a.data :
+          '/api/public/tempmail/attachment/' + encodeURIComponent(id) +
           '/' + encodeURIComponent(a.part_id) +
           '?token=' + encodeURIComponent(tmToken) + '&provider=guerrilla';
         if (/\.(png|jpe?g|gif|webp|bmp)$/i.test(a.name || '')) {
