@@ -1679,42 +1679,6 @@ def _tempmail_create(base):
         return data["address"], "tml:" + str(data["token"])
     return None, "failed"
 
-def _guerrilla_create(base):
-    """GuerrillaMail: set_email_user with the username. No account
-    creation limit like mail.tm. Returns (address, token) or (None, reason)."""
-    for local in (base, "%s%d" % (base, random.randint(10, 9999))):
-        q = _urlparse.urlencode({"f": "set_email_user", "email_user": local,
-                                 "lang": "en"})
-        status, data = _http_json("GET", GM_API + "?" + q)
-        if status == 429:
-            return None, "rate_limited"
-        if status == 200 and isinstance(data, dict) \
-                and data.get("email_addr") and data.get("sid_token"):
-            addr = data["email_addr"]
-            if addr.lower().startswith(local.lower() + "@"):
-                return addr, "gm:" + str(data["sid_token"])
-            continue  # name was taken / rewritten — try suffixed name once
-    return None, "failed"
-
-_guerrilla_domain_cache = {"at": 0.0, "domain": ""}
-
-def _guerrilla_domain():
-    """GuerrillaMail has no domain-list API — the domain is assigned per
-    address. Learn it live from one get_email_address call (cached 1h),
-    falling back to the last known domain."""
-    now = _time_module.time()
-    if now - _guerrilla_domain_cache["at"] < 3600 \
-            and _guerrilla_domain_cache["domain"]:
-        return _guerrilla_domain_cache["domain"]
-    status, data = _http_json("GET", GM_API + "?" + _urlparse.urlencode(
-        {"f": "get_email_address", "lang": "en"}))
-    if status == 200 and isinstance(data, dict) and data.get("email_addr"):
-        dom = str(data["email_addr"]).rsplit("@", 1)[-1].strip().lower()
-        if "." in dom:
-            _guerrilla_domain_cache.update(at=now, domain=dom)
-            return dom
-    return _guerrilla_domain_cache["domain"] or "guerrillamailblock.com"
-
 def _guerrilla_attachments(m):
     """Normalize GuerrillaMail fetch_email attachment info into a list of
     {"name": ..., "part_id": ...}. OTP mails often carry the code as an
@@ -1781,25 +1745,21 @@ def api_public_tempmail_create():
     base = _tempmail_sanitize(data.get("name", ""))
     if not base:
         base = "user" + secrets_module.token_hex(3)
-    # Fresh mailbox every time (never reused). Long-lived inboxes first:
-    # mail.tm and GuerrillaMail keep mail ~1 hour, but tempmail.lol
-    # expires after ~10 min without a check (1h hard limit), so it is
-    # only a fallback — otherwise OTPs die while the user waits.
-    # The two long-lived providers are shuffled so load spreads
-    # across them; a 429 on one just moves on to the next.
-    # A "provider" choice (site picker / bot) pins one provider.
+    # Fresh mailbox every time (never reused). mail.tm keeps mail ~1 hour;
+    # tempmail.lol expires after ~10 min without a check (1h hard limit),
+    # so it is only a fallback — otherwise OTPs die while the user waits.
+    # GuerrillaMail was removed 2026-11-16 (it returns empty mail for
+    # some OTP senders); a stale "guerrilla" choice just falls through
+    # to the default below. A "provider" choice (site picker / bot)
+    # pins one provider.
     provider = (data.get("provider") or "").strip().lower()
     if provider == "mailtm":
         makers = [("mailtm", _mailtm_create)]
-    elif provider == "guerrilla":
-        makers = [("guerrilla", _guerrilla_create)]
     elif provider == "tempmail":
         makers = [("tempmail", _tempmail_create)]
     else:
         makers = [("mailtm", _mailtm_create),
-                  ("guerrilla", _guerrilla_create)]
-        random.shuffle(makers)
-        makers.append(("tempmail", _tempmail_create))
+                  ("tempmail", _tempmail_create)]
     saw_rate_limited = False
     for _name, make in makers:
         try:
@@ -1983,15 +1943,11 @@ def _tempmail_read_message(provider, inner, msg_id):
 
 @app.route('/api/public/tempmail/domains')
 def api_public_tempmail_domains():
-    """Combined live domain list: mail.tm (pickable) + GuerrillaMail
-    (domain assigned by the provider — learned live, cached 1h)."""
+    """Live domain list: mail.tm only. GuerrillaMail was removed
+    2026-11-16 (it returns empty mail for some OTP senders)."""
     domains = []
     for d in _mailtm_domains():
         domains.append({"provider": "mailtm", "domain": d, "label": "mail.tm"})
-    gdom = _guerrilla_domain()
-    if gdom:
-        domains.append({"provider": "guerrilla", "domain": gdom,
-                        "label": "GuerrillaMail"})
     return jsonify(success=True, domains=domains)
 
 @app.route('/api/public/tempmail/messages')

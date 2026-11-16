@@ -425,8 +425,6 @@ def register_handlers(b, ctx=None):
         keyboard.add(
             telebot.types.InlineKeyboardButton(
                 "mail.tm", callback_data="tm:provider:mailtm"),
-            telebot.types.InlineKeyboardButton(
-                "GuerrillaMail", callback_data="tm:provider:guerrilla"),
         )
         keyboard.add(telebot.types.InlineKeyboardButton(
             "🎲 Auto (any)", callback_data="tm:provider:auto"))
@@ -464,14 +462,8 @@ def register_handlers(b, ctx=None):
             address, token = _mailtm_create(base)
             return (address, token, "mailtm") if address and token \
                 else (None, None, None)
-        if provider == "guerrilla":
-            address, token = _guerrilla_create(base)
-            return (address, token, "guerrilla") if address and token \
-                else (None, None, None)
-        # auto — try the two long-lived providers in random order
-        makers = [("mailtm", _mailtm_create),
-                  ("guerrilla", _guerrilla_create)]
-        random.shuffle(makers)
+        # auto — mail.tm only (GuerrillaMail removed 2026-11-16)
+        makers = [("mailtm", _mailtm_create)]
         for name, make in makers:
             try:
                 address, token = make(base)
